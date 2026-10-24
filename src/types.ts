@@ -188,6 +188,7 @@ export const DATA_TYPES: Record<
 
 export type AgentPersonality = 'professional' | 'roast' | 'analytical' | 'creative' | 'direct'
 export type AgentCategory = 'finance' | 'market' | 'strategy' | 'operations' | 'marketing' | 'community'
+export type ChatScope = 'all' | 'specific'
 
 export interface AgentProfile {
   id: string
@@ -212,4 +213,6 @@ export interface AgentProfile {
   downloads?: number
   rating?: number
   specialtyTags?: string[]
+  chatScope?: ChatScope
+  allowedChatIds?: string[]
 }

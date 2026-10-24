@@ -206,6 +206,28 @@ export function deleteCustomAgent(agentId: string) {
   persistAgents()
 }
 
+export function updateAgentPermissions(
+  agentId: string,
+  scope: 'all' | 'specific',
+  allowedChatIds: string[],
+) {
+  const agent = agentsList.value.find((a) => a.id === agentId)
+  if (agent) {
+    agent.chatScope = scope
+    agent.allowedChatIds = allowedChatIds
+    persistAgents()
+  }
+}
+
+export function isAgentAllowedInChat(agent: AgentProfile, chatId?: string | null): boolean {
+  if (!agent.enabled) return false
+  // If agent has no restrictions or is set to 'all'
+  if (!agent.chatScope || agent.chatScope === 'all') return true
+  // If specific, check if active chat is in allowed list
+  if (!chatId) return true // When in brand-new unsaved session
+  return agent.allowedChatIds?.includes(chatId) ?? false
+}
+
 export function resetDefaultAgents() {
   agentsList.value = [...DEFAULT_AGENTS]
   persistAgents()

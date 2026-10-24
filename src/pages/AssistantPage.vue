@@ -28,7 +28,7 @@ import ChatHistory from '@/components/features/ChatHistory.vue'
 import WelcomeMark from '@/components/brand/WelcomeMark.vue'
 import PastelIcon from '@/components/brand/PastelIcon.vue'
 import AgentVaultModal from '@/components/features/AgentVaultModal.vue'
-import { agentsList } from '@/lib/agentVault'
+import { agentsList, isAgentAllowedInChat } from '@/lib/agentVault'
 import { createConversation, createMessage, getConversations, getSession, listSources, saveConversations, streamAiReply } from '@/lib/mockApi'
 import { formatNumber } from '@/lib/format'
 import { sidebarCollapsed } from '@/lib/shell'
@@ -64,6 +64,9 @@ const contextOpen = ref(false)
 const historyOpen = ref(false)
 const showAgentVault = ref(false)
 const activeAgents = computed(() => agentsList.value.filter((a) => a.enabled))
+const activeBoardroomAgents = computed(() => {
+  return agentsList.value.filter((agent) => isAgentAllowedInChat(agent, activeId.value))
+})
 const historyCollapsed = ref(localStorage.getItem('rookar.assistant.history-collapsed') === '1')
 const initialized = ref(false)
 const messageList = ref<HTMLElement | null>(null)
@@ -541,7 +544,7 @@ async function copyMessage(text: string) {
       >
         <span class="flex -space-x-1.5 overflow-hidden">
           <span
-            v-for="agent in activeAgents.slice(0, 3)"
+            v-for="agent in activeBoardroomAgents.slice(0, 3)"
             :key="agent.id"
             class="inline-flex h-4 w-4 items-center justify-center rounded-full text-[8px] font-bold text-white ring-1 ring-white"
             :style="{ backgroundColor: agent.color }"
@@ -549,9 +552,9 @@ async function copyMessage(text: string) {
             {{ agent.name.charAt(0) }}
           </span>
         </span>
-        <span class="hidden sm:inline">บอร์ดบริหาร AI ({{ activeAgents.length }} ตัว)</span>
-        <span class="sm:hidden">ทีม AI ({{ activeAgents.length }})</span>
-        <span class="rounded bg-black/5 px-1.5 py-0.2 text-[10px] text-muted font-medium">Vault</span>
+        <span class="hidden sm:inline">บอร์ดบริหารในแชทนี้ ({{ activeBoardroomAgents.length }} ตัว)</span>
+        <span class="sm:hidden">ทีม AI ({{ activeBoardroomAgents.length }})</span>
+        <span class="rounded bg-black/5 px-1.5 py-0.2 text-[10px] text-muted font-medium">สิทธิ์ & Vault</span>
       </button>
     </div>
 
@@ -892,7 +895,11 @@ async function copyMessage(text: string) {
     />
   </AppSheet>
 
-  <!-- Agent Vault & Custom Boardroom Modal -->
-  <AgentVaultModal v-model:open="showAgentVault" />
+  <!-- Agent Vault & Custom Boardroom Modal with Chat Permissions -->
+  <AgentVaultModal
+    v-model:open="showAgentVault"
+    :current-chat-id="activeId"
+    :conversations="history"
+  />
   </div>
 </template>
