@@ -21,6 +21,7 @@ import {
   X,
   Users,
   Plus,
+  Lightbulb,
 } from '@lucide/vue'
 import AppSheet from '@/components/ui/AppSheet.vue'
 import ChatBubble from '@/components/features/ChatBubble.vue'
@@ -63,6 +64,18 @@ const stopRequested = ref(false)
 const contextOpen = ref(false)
 const historyOpen = ref(false)
 const showAgentVault = ref(false)
+const inspectAgentId = ref<string | null>(null)
+
+function openAgentLogic(agentId: string) {
+  inspectAgentId.value = agentId
+  showAgentVault.value = true
+}
+
+function openVaultGeneral() {
+  inspectAgentId.value = null
+  showAgentVault.value = true
+}
+
 const activeAgents = computed(() => agentsList.value.filter((a) => a.enabled))
 const activeBoardroomAgents = computed(() => {
   return agentsList.value.filter((agent) => isAgentAllowedInChat(agent, activeId.value))
@@ -539,8 +552,8 @@ async function copyMessage(text: string) {
       <button
         type="button"
         class="inline-flex items-center gap-2 rounded-full bg-[#f4f5f7] px-3 py-1.5 text-xs font-semibold text-ink transition hover:bg-[#e9ebef]"
-        title="จัดการทีมที่ปรึกษา AI และเปิดคลัง Agent Vault"
-        @click="showAgentVault = true"
+        title="จัดการทีมที่ปรึกษา AI, ดู Logic ความเชี่ยวชาญ และเปิดคลัง Agent Vault"
+        @click="openVaultGeneral"
       >
         <span class="flex -space-x-1.5 overflow-hidden">
           <span
@@ -554,7 +567,7 @@ async function copyMessage(text: string) {
         </span>
         <span class="hidden sm:inline">บอร์ดบริหารในแชทนี้ ({{ activeBoardroomAgents.length }} ตัว)</span>
         <span class="sm:hidden">ทีม AI ({{ activeBoardroomAgents.length }})</span>
-        <span class="rounded bg-black/5 px-1.5 py-0.2 text-[10px] text-muted font-medium">สิทธิ์ & Vault</span>
+        <span class="rounded bg-black/5 px-1.5 py-0.2 text-[10px] text-muted font-medium">Logic & Vault</span>
       </button>
     </div>
 
@@ -622,24 +635,28 @@ async function copyMessage(text: string) {
           </div>
 
           <!-- Active Multi-Agent Boardroom Preview & Vault Button -->
-          <div class="mt-3 flex items-center justify-center gap-2">
-            <div class="flex items-center gap-1.5 rounded-full bg-neutral-100/80 px-3 py-1 text-[11px] text-muted">
-              <span class="font-medium">ทีม Agent ที่กำลังเปิดใช้งาน:</span>
-              <span class="flex items-center gap-1 font-semibold text-ink">
-                <span
-                  v-for="a in activeAgents"
+          <div class="mt-3 flex flex-wrap items-center justify-center gap-2">
+            <div class="flex flex-wrap items-center gap-1.5 rounded-full bg-neutral-100/80 px-3 py-1 text-[11px] text-muted">
+              <span class="font-medium">ทีม Agent ในแชทนี้:</span>
+              <span class="flex flex-wrap items-center gap-1 font-semibold text-ink">
+                <button
+                  v-for="a in activeBoardroomAgents"
                   :key="a.id"
-                  class="inline-block rounded-md px-1.5 py-0.2 text-[10px] text-white"
+                  type="button"
+                  class="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] text-white hover:opacity-90 transition cursor-pointer"
                   :style="{ backgroundColor: a.color }"
+                  title="คลิกเพื่อตรวจดู Logic ความเชี่ยวชาญของ Agent นี้"
+                  @click="openAgentLogic(a.id)"
                 >
-                  {{ a.name.split(' ')[0] }}
-                </span>
+                  <span>{{ a.name.split(' ')[0] }}</span>
+                  <Lightbulb class="h-2.5 w-2.5 text-amber-200 fill-amber-300" />
+                </button>
               </span>
             </div>
             <button
               type="button"
-              class="inline-flex items-center gap-1 rounded-full border border-black/10 bg-white px-2.5 py-1 text-[11px] font-semibold text-ink transition hover:bg-black hover:text-white"
-              @click="showAgentVault = true"
+              class="inline-flex items-center gap-1 rounded-full border border-black/10 bg-white px-2.5 py-1 text-[11px] font-semibold text-ink transition hover:bg-black hover:text-white cursor-pointer"
+              @click="openVaultGeneral"
             >
               <Plus class="h-3 w-3" />
               <span>จัดทีม / Vault</span>
@@ -895,11 +912,12 @@ async function copyMessage(text: string) {
     />
   </AppSheet>
 
-  <!-- Agent Vault & Custom Boardroom Modal with Chat Permissions -->
+  <!-- Agent Vault & Custom Boardroom Modal with Chat Permissions & Logic Inspector -->
   <AgentVaultModal
     v-model:open="showAgentVault"
     :current-chat-id="activeId"
     :conversations="history"
+    :initial-agent-id="inspectAgentId"
   />
   </div>
 </template>

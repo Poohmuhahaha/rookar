@@ -190,6 +190,20 @@ export type AgentPersonality = 'professional' | 'roast' | 'analytical' | 'creati
 export type AgentCategory = 'finance' | 'market' | 'strategy' | 'operations' | 'marketing' | 'community'
 export type ChatScope = 'all' | 'specific'
 
+export interface AgentBenchmarkScore {
+  label: string
+  score: string
+  metric: string
+}
+
+export interface AgentExpertiseLogic {
+  whySpecialized: string
+  reasoningFramework: string
+  knowledgeBase: string[]
+  coreStrengths: string[]
+  benchmarkScore: AgentBenchmarkScore
+}
+
 export interface AgentProfile {
   id: string
   name: string
@@ -215,4 +229,5 @@ export interface AgentProfile {
   specialtyTags?: string[]
   chatScope?: ChatScope
   allowedChatIds?: string[]
+  expertiseLogic?: AgentExpertiseLogic
 }

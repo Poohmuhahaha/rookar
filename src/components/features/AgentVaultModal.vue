@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import {
   Bot,
   Check,
@@ -19,6 +19,15 @@ import {
   Square,
   MessageSquare,
   ArrowLeft,
+  Brain,
+  Award,
+  Database,
+  Target,
+  Lightbulb,
+  FileText,
+  ChevronDown,
+  ChevronUp,
+  ShieldCheck,
 } from '@lucide/vue'
 import AppModal from '@/components/ui/AppModal.vue'
 import AppButton from '@/components/ui/AppButton.vue'
@@ -29,6 +38,7 @@ import {
   deleteCustomAgent,
   updateAgentPermissions,
   isAgentAllowedInChat,
+  generateCustomExpertiseLogic,
 } from '@/lib/agentVault'
 import type { AgentCategory, AgentPersonality, AgentProfile } from '@/types'
 import { cn } from '@/lib/cn'
@@ -38,10 +48,12 @@ const props = withDefaults(
     open: boolean
     currentChatId?: string | null
     conversations?: { id: string; title: string; updatedAt?: string }[]
+    initialAgentId?: string | null
   }>(),
   {
     currentChatId: null,
     conversations: () => [],
+    initialAgentId: null,
   },
 )
 
@@ -57,7 +69,39 @@ const editingAgent = ref<AgentProfile | null>(null)
 const tempScope = ref<'all' | 'specific'>('all')
 const tempAllowedChats = ref<string[]>([])
 
+// Logic Inspector state
+const inspectingAgent = ref<AgentProfile | null>(null)
+const showSystemPrompt = ref(false)
+
+watch(
+  () => [props.open, props.initialAgentId],
+  ([isOpen, id]) => {
+    if (isOpen && id) {
+      const match = agentsList.value.find((a) => a.id === id)
+      if (match) {
+        inspectingAgent.value = match
+      }
+    } else if (!isOpen) {
+      inspectingAgent.value = null
+      editingAgent.value = null
+      showSystemPrompt.value = false
+    }
+  },
+  { immediate: true },
+)
+
+function openLogicInspector(agent: AgentProfile) {
+  inspectingAgent.value = agent
+  showSystemPrompt.value = false
+}
+
+function closeLogicInspector() {
+  inspectingAgent.value = null
+  showSystemPrompt.value = false
+}
+
 function openPermissionEditor(agent: AgentProfile) {
+  inspectingAgent.value = null
   editingAgent.value = agent
   tempScope.value = agent.chatScope || 'all'
   tempAllowedChats.value = [...(agent.allowedChatIds || [])]
@@ -132,6 +176,8 @@ const newPersonality = ref<AgentPersonality>('analytical')
 const newDescription = ref('')
 const newPrompt = ref('')
 const newTags = ref('')
+const customFramework = ref('')
+const customWhySpecialized = ref('')
 
 const personalities: { id: AgentPersonality; label: string; desc: string }[] = [
   { id: 'analytical', label: 'วิเคราะห์ตัวเลขลึก', desc: 'เน้นสูตรคำนวณ แม่นยำ อิงสถิติ' },
@@ -151,7 +197,7 @@ function handleCreateAgent() {
   const personalityObj = personalities.find((p) => p.id === newPersonality.value)
   const categoryObj = categories.find((c) => c.id === newCategory.value)
 
-  createCustomAgent({
+  const partialAgent = {
     name: newName.value.trim(),
     role: newRole.value.trim(),
     category: newCategory.value,
@@ -163,8 +209,21 @@ function handleCreateAgent() {
     color: '#000000',
     specialtyTags: tags.length ? tags : ['เฉพาะทาง'],
     enabled: true,
-    chatScope: 'all',
+    chatScope: 'all' as const,
     allowedChatIds: [],
+  }
+
+  const generatedLogic = generateCustomExpertiseLogic(partialAgent)
+  if (customFramework.value.trim()) {
+    generatedLogic.reasoningFramework = customFramework.value.trim()
+  }
+  if (customWhySpecialized.value.trim()) {
+    generatedLogic.whySpecialized = customWhySpecialized.value.trim()
+  }
+
+  createCustomAgent({
+    ...partialAgent,
+    expertiseLogic: generatedLogic,
   })
 
   // Reset form
@@ -173,6 +232,8 @@ function handleCreateAgent() {
   newDescription.value = ''
   newPrompt.value = ''
   newTags.value = ''
+  customFramework.value = ''
+  customWhySpecialized.value = ''
   currentTab.value = 'my-team'
 }
 </script>
@@ -185,8 +246,212 @@ function handleCreateAgent() {
     @update:open="emit('update:open', $event)"
   >
     <template #default>
+      <!-- LOGIC & COMPETENCY INSPECTOR SUBVIEW -->
+      <div v-if="inspectingAgent" class="space-y-4">
+        <!-- Top bar: Back and Title -->
+        <div class="flex items-center justify-between border-b border-black/[0.06] pb-3">
+          <button
+            type="button"
+            class="flex items-center gap-1.5 text-xs font-semibold text-muted hover:text-ink transition"
+            @click="closeLogicInspector"
+          >
+            <ArrowLeft class="h-3.5 w-3.5" />
+            กลับไปหน้ารวม
+          </button>
+          <div class="flex items-center gap-2">
+            <span
+              class="h-2.5 w-2.5 rounded-full"
+              :style="{ backgroundColor: inspectingAgent.color }"
+            />
+            <h3 class="text-sm font-bold text-ink">Logic & ความเชี่ยวชาญ: {{ inspectingAgent.name }}</h3>
+          </div>
+        </div>
+
+        <!-- Agent Header Identity Card -->
+        <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between rounded-2xl bg-neutral-50 p-4 border border-black/[0.04]">
+          <div class="flex items-center gap-3">
+            <div
+              class="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl text-white font-bold text-base shadow-xs"
+              :style="{ backgroundColor: inspectingAgent.color }"
+            >
+              {{ inspectingAgent.name.charAt(0) }}
+            </div>
+            <div>
+              <div class="flex flex-wrap items-center gap-1.5">
+                <h4 class="text-sm font-bold text-ink">{{ inspectingAgent.name }}</h4>
+                <span
+                  v-if="inspectingAgent.creator.isOfficial"
+                  class="rounded bg-neutral-200/80 px-2 py-0.5 text-[10px] font-semibold text-ink"
+                >
+                  Official
+                </span>
+                <span
+                  v-else-if="inspectingAgent.isCustom"
+                  class="rounded bg-brand-50 px-2 py-0.5 text-[10px] font-semibold text-brand-700"
+                >
+                  กำหนดเอง
+                </span>
+                <span class="rounded-full bg-white px-2 py-0.5 text-[10px] font-semibold text-muted border border-black/[0.04]">
+                  {{ inspectingAgent.categoryLabel }}
+                </span>
+                <span
+                  :class="[
+                    'rounded-full px-2 py-0.5 text-[10px] font-semibold',
+                    inspectingAgent.personality === 'roast'
+                      ? 'bg-red-50 text-red-700'
+                      : 'bg-neutral-200/60 text-ink',
+                  ]"
+                >
+                  {{ inspectingAgent.personalityLabel }}
+                </span>
+              </div>
+              <p class="text-xs font-medium text-muted mt-0.5">{{ inspectingAgent.role }}</p>
+            </div>
+          </div>
+
+          <div class="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              :class="[
+                'inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-semibold transition',
+                inspectingAgent.enabled
+                  ? 'bg-black text-white hover:bg-neutral-800'
+                  : 'bg-neutral-200 text-ink hover:bg-black hover:text-white',
+              ]"
+              @click="toggleAgentEnabled(inspectingAgent.id)"
+            >
+              <Check v-if="inspectingAgent.enabled" class="h-3.5 w-3.5 text-white" />
+              <Plus v-else class="h-3.5 w-3.5" />
+              <span>{{ inspectingAgent.enabled ? 'เปิดใช้งานในทีมแล้ว' : '+ เพิ่มเข้าทีม' }}</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Section 1: Why Specialized (Callout Box) -->
+        <div class="rounded-2xl bg-amber-50/70 p-4 border border-amber-200/70">
+          <div class="flex items-center gap-2 text-amber-900 font-bold text-xs mb-1.5">
+            <Lightbulb class="h-4 w-4 text-amber-600 shrink-0 fill-amber-500" />
+            <span>ทำไม Agent ตัวนี้ถึงเก่งและเชี่ยวชาญกว่า AI ทั่วไป?</span>
+          </div>
+          <p class="text-xs text-amber-950 leading-relaxed font-medium">
+            {{ inspectingAgent.expertiseLogic?.whySpecialized }}
+          </p>
+        </div>
+
+        <!-- Section 2: Reasoning Framework & Benchmark Score (2 columns) -->
+        <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <!-- Framework Box -->
+          <div class="rounded-2xl border border-black/[0.06] bg-white p-4">
+            <div class="flex items-center gap-2 text-xs font-bold text-ink mb-1.5">
+              <Brain class="h-4 w-4 text-brand-700" />
+              <span>ตรรกะ & Framework การคิด (Reasoning)</span>
+            </div>
+            <p class="text-[11px] text-muted mb-2.5">
+              อัลกอริทึมและโมเดลทฤษฎีธุรกิจที่ระบบใช้กำกับการวิเคราะห์:
+            </p>
+            <div class="rounded-xl bg-neutral-100 p-2.5 font-mono text-xs font-semibold text-ink leading-relaxed">
+              {{ inspectingAgent.expertiseLogic?.reasoningFramework }}
+            </div>
+          </div>
+
+          <!-- Benchmark Box -->
+          <div class="rounded-2xl border border-black/[0.06] bg-white p-4">
+            <div class="flex items-center gap-2 text-xs font-bold text-ink mb-1.5">
+              <Award class="h-4 w-4 text-emerald-600" />
+              <span>ดัชนีชี้วัดและการทดสอบจริง (Benchmark)</span>
+            </div>
+            <div class="flex items-baseline gap-2 mt-1">
+              <span class="text-2xl font-black text-emerald-600 tracking-tight">
+                {{ inspectingAgent.expertiseLogic?.benchmarkScore.score }}
+              </span>
+              <span class="text-xs font-bold text-ink">
+                {{ inspectingAgent.expertiseLogic?.benchmarkScore.label }}
+              </span>
+            </div>
+            <p class="text-[11px] text-muted mt-1 leading-relaxed">
+              {{ inspectingAgent.expertiseLogic?.benchmarkScore.metric }}
+            </p>
+          </div>
+        </div>
+
+        <!-- Section 3: Grounded Knowledge Base -->
+        <div class="rounded-2xl border border-black/[0.06] bg-white p-4">
+          <div class="flex items-center gap-2 text-xs font-bold text-ink mb-1">
+            <Database class="h-4 w-4 text-blue-600" />
+            <span>คลังข้อมูลอ้างอิง & กฎเกณฑ์ที่ใช้เทียบเคียง (Grounded Knowledge)</span>
+          </div>
+          <p class="text-[11px] text-muted mb-3">
+            Agent ตัวนี้ไม่ได้ใช้การคาดเดา แต่เชื่อมโยงและอ้างอิงจากฐานข้อมูลและมาตรฐานต่อไปนี้:
+          </p>
+          <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <div
+              v-for="(kb, idx) in inspectingAgent.expertiseLogic?.knowledgeBase || []"
+              :key="idx"
+              class="flex items-start gap-2 rounded-xl bg-neutral-50 p-2.5 text-xs text-ink border border-black/[0.03]"
+            >
+              <ShieldCheck class="h-3.5 w-3.5 text-blue-600 shrink-0 mt-0.5" />
+              <span class="font-medium text-[11.5px] leading-snug">{{ kb }}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Section 4: Core Operational Strengths -->
+        <div class="rounded-2xl border border-black/[0.06] bg-white p-4">
+          <div class="flex items-center gap-2 text-xs font-bold text-ink mb-2.5">
+            <Target class="h-4 w-4 text-purple-600" />
+            <span>ขีดความสามารถเฉพาะทาง (Operational Capabilities)</span>
+          </div>
+          <div class="space-y-2">
+            <div
+              v-for="(strength, idx) in inspectingAgent.expertiseLogic?.coreStrengths || []"
+              :key="idx"
+              class="flex items-center gap-2.5 text-xs text-ink"
+            >
+              <div class="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-700">
+                <Check class="h-2.5 w-2.5 stroke-[3]" />
+              </div>
+              <span class="font-medium">{{ strength }}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Section 5: Collapsible System Prompt View -->
+        <div class="rounded-2xl border border-black/[0.06] bg-white overflow-hidden">
+          <button
+            type="button"
+            class="flex w-full items-center justify-between p-3.5 text-xs font-semibold text-muted hover:text-ink transition hover:bg-neutral-50 text-left"
+            @click="showSystemPrompt = !showSystemPrompt"
+          >
+            <div class="flex items-center gap-2">
+              <FileText class="h-3.5 w-3.5 text-neutral-400" />
+              <span>ดูคำสั่งควบคุมพฤติกรรมเบื้องหลัง (System Prompt & Guardrails)</span>
+            </div>
+            <component :is="showSystemPrompt ? ChevronUp : ChevronDown" class="h-3.5 w-3.5" />
+          </button>
+          <div v-if="showSystemPrompt" class="border-t border-black/[0.06] bg-neutral-900 p-3.5 text-[11px] font-mono text-neutral-200 whitespace-pre-wrap leading-relaxed">
+            {{ inspectingAgent.systemPrompt }}
+          </div>
+        </div>
+
+        <!-- Footer Actions in Inspector -->
+        <div class="flex items-center justify-between pt-3 border-t border-black/[0.06]">
+          <button
+            type="button"
+            class="inline-flex items-center gap-1.5 rounded-full border border-black/10 bg-white px-3 py-1.5 text-xs font-semibold text-ink hover:bg-neutral-50 transition"
+            @click="openPermissionEditor(inspectingAgent)"
+          >
+            <Lock class="h-3 w-3 text-muted" />
+            <span>ตั้งค่าสิทธิ์ห้องแชทของตัวนี้</span>
+          </button>
+
+          <AppButton size="sm" @click="closeLogicInspector">
+            ตกลง / ปิดหน้าต่าง
+          </AppButton>
+        </div>
+      </div>
+
       <!-- PERMISSION EDITOR SUBVIEW -->
-      <div v-if="editingAgent" class="space-y-4">
+      <div v-else-if="editingAgent" class="space-y-4">
         <div class="flex items-center justify-between border-b border-black/[0.06] pb-3">
           <button
             type="button"
@@ -351,7 +616,7 @@ function handleCreateAgent() {
       <div v-else>
         <!-- Subtitle description -->
         <p class="text-xs text-muted -mt-2 mb-4 leading-relaxed">
-          จัดทัพที่ปรึกษา AI ร่วมวิเคราะห์ธุรกิจของคุณ, กำหนดสิทธิ์แยกตามห้องแชท, หรือเลือกนำเข้า Agent สำเร็จรูปจากคลังชุมชน
+          จัดทัพที่ปรึกษา AI ร่วมวิเคราะห์ธุรกิจของคุณ, ดูตรรกะความเชี่ยวชาญเฉพาะด้าน (Competency Logic), กำหนดสิทธิ์แยกตามห้องแชท, หรือเลือกนำเข้า Agent สำเร็จรูป
         </p>
 
         <!-- Tab Buttons -->
@@ -362,7 +627,7 @@ function handleCreateAgent() {
               :class="[
                 'flex items-center gap-2 rounded-full px-4 py-1.5 text-xs font-semibold transition',
                 currentTab === 'my-team'
-                  ? 'bg-black text-white shadow-sm'
+                  ? 'bg-black text-white shadow-xs'
                   : 'text-muted hover:text-ink',
               ]"
               @click="currentTab = 'my-team'"
@@ -384,7 +649,7 @@ function handleCreateAgent() {
               :class="[
                 'flex items-center gap-2 rounded-full px-4 py-1.5 text-xs font-semibold transition',
                 currentTab === 'vault'
-                  ? 'bg-black text-white shadow-sm'
+                  ? 'bg-black text-white shadow-xs'
                   : 'text-muted hover:text-ink',
               ]"
               @click="currentTab = 'vault'"
@@ -413,7 +678,7 @@ function handleCreateAgent() {
           <div class="flex items-center justify-between px-1">
             <p class="text-xs font-medium text-ink">
               เปิดใช้งานอยู่ <strong class="text-black font-bold">{{ activeAgents.length }}</strong> ตัว จากทั้งหมด {{ agentsList.length }} ตัว
-              <span class="text-muted font-normal">(คลิกที่ปุ่มสิทธิ์ 🔒 เพื่อกำหนดว่าจะให้ Agent เข้าร่วมในแชทใดบ้าง)</span>
+              <span class="text-muted font-normal">(คลิก <strong class="text-amber-800">💡 ทำไมถึงเก่งด้านนี้?</strong> เพื่อตรวจดู Logic ความเชี่ยวชาญ)</span>
             </p>
           </div>
 
@@ -424,7 +689,7 @@ function handleCreateAgent() {
               :class="[
                 'relative flex flex-col justify-between rounded-2xl p-4 transition border',
                 agent.enabled
-                  ? 'bg-white border-black/10 shadow-sm'
+                  ? 'bg-white border-black/10 shadow-xs'
                   : 'bg-neutral-50/70 border-dashed border-neutral-200 opacity-60',
               ]"
             >
@@ -482,7 +747,7 @@ function handleCreateAgent() {
                   {{ agent.description }}
                 </p>
 
-                <!-- Tags & Permission Status -->
+                <!-- Tags, Permission Status & Logic Button -->
                 <div class="mt-3 flex flex-wrap items-center gap-1.5">
                   <span
                     :class="[
@@ -518,6 +783,17 @@ function handleCreateAgent() {
                           : 'ทุกแชท'
                       }}
                     </span>
+                  </button>
+
+                  <!-- Direct Logic Button -->
+                  <button
+                    type="button"
+                    class="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-800 border border-amber-200/60 hover:bg-amber-100 transition"
+                    title="คลิกเพื่อตรวจดู Logic และเหตุผลที่ Agent ตัวนี้เชี่ยวชาญด้านนี้"
+                    @click="openLogicInspector(agent)"
+                  >
+                    <Lightbulb class="h-2.5 w-2.5 text-amber-600 fill-amber-500" />
+                    <span>ทำไมถึงเก่งด้านนี้?</span>
                   </button>
                 </div>
               </div>
@@ -599,7 +875,7 @@ function handleCreateAgent() {
             <div
               v-for="agent in filteredVaultAgents"
               :key="agent.id"
-              class="flex flex-col justify-between rounded-2xl bg-white p-4 border border-black/[0.06] shadow-sm hover:border-black/20 transition"
+              class="flex flex-col justify-between rounded-2xl bg-white p-4 border border-black/[0.06] shadow-xs hover:border-black/20 transition"
             >
               <div>
                 <div class="flex items-start justify-between gap-2">
@@ -634,8 +910,8 @@ function handleCreateAgent() {
                   {{ agent.description }}
                 </p>
 
-                <!-- Tags -->
-                <div class="mt-3 flex flex-wrap gap-1.5">
+                <!-- Tags & Logic Button -->
+                <div class="mt-3 flex flex-wrap items-center gap-1.5">
                   <span
                     :class="[
                       'rounded-full px-2 py-0.5 text-[10px] font-semibold',
@@ -647,12 +923,22 @@ function handleCreateAgent() {
                     {{ agent.personalityLabel }}
                   </span>
                   <span
-                    v-for="tag in (agent.specialtyTags || []).slice(0, 3)"
+                    v-for="tag in (agent.specialtyTags || []).slice(0, 2)"
                     :key="tag"
                     class="rounded-full bg-neutral-50 px-2 py-0.5 text-[10px] text-muted border border-black/[0.04]"
                   >
                     #{{ tag }}
                   </span>
+
+                  <button
+                    type="button"
+                    class="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-800 border border-amber-200/60 hover:bg-amber-100 transition"
+                    title="คลิกเพื่อตรวจดู Logic ความเชี่ยวชาญของ Agent นี้"
+                    @click="openLogicInspector(agent)"
+                  >
+                    <Lightbulb class="h-2.5 w-2.5 text-amber-600 fill-amber-500" />
+                    <span>ทำไมถึงเก่ง?</span>
+                  </button>
                 </div>
               </div>
 
@@ -664,20 +950,31 @@ function handleCreateAgent() {
                   <span>{{ agent.downloads }} ใช้งาน</span>
                 </div>
 
-                <button
-                  type="button"
-                  :class="[
-                    'inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold transition',
-                    agent.enabled
-                      ? 'bg-black text-white hover:bg-neutral-800'
-                      : 'bg-neutral-100 text-ink hover:bg-black hover:text-white',
-                  ]"
-                  @click="toggleAgentEnabled(agent.id)"
-                >
-                  <Check v-if="agent.enabled" class="h-3 w-3 text-white" />
-                  <Plus v-else class="h-3 w-3" />
-                  {{ agent.enabled ? 'อยู่ในทีมแล้ว' : '+ เพิ่มเข้าทีม' }}
-                </button>
+                <div class="flex items-center gap-2">
+                  <button
+                    type="button"
+                    class="text-xs font-semibold text-amber-700 hover:text-amber-900 hover:underline flex items-center gap-1"
+                    @click="openLogicInspector(agent)"
+                  >
+                    <Lightbulb class="h-3 w-3" />
+                    <span>Logic</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    :class="[
+                      'inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold transition',
+                      agent.enabled
+                        ? 'bg-black text-white hover:bg-neutral-800'
+                        : 'bg-neutral-100 text-ink hover:bg-black hover:text-white',
+                    ]"
+                    @click="toggleAgentEnabled(agent.id)"
+                  >
+                    <Check v-if="agent.enabled" class="h-3 w-3 text-white" />
+                    <Plus v-else class="h-3 w-3" />
+                    {{ agent.enabled ? 'อยู่ในทีมแล้ว' : '+ เพิ่มเข้าทีม' }}
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -693,6 +990,17 @@ function handleCreateAgent() {
             <p class="text-xs text-muted mt-0.5">
               กำหนดบทบาท นิสัยเฉพาะ และโจทย์ธุรกิจที่ต้องการให้ Agent ช่วยคิดวิเคราะห์
             </p>
+          </div>
+
+          <!-- Competency Notice Banner -->
+          <div class="rounded-2xl bg-brand-50/70 p-3.5 border border-brand-200/60 text-xs text-brand-900 flex items-start gap-2.5">
+            <Lightbulb class="h-4 w-4 text-brand-600 shrink-0 mt-0.5 fill-brand-400" />
+            <div>
+              <p class="font-bold">ระบบ AI Competency Engine จะสร้าง Logic ให้ Agent ตัวนี้อัตโนมัติ</p>
+              <p class="text-[11px] text-brand-800 mt-0.5">
+                ทั้ง Framework การคิด, ชุดข้อมูลอ้างอิง, และตัวชี้วัดความแม่นยำ เพื่อให้พร้อมเข้าร่วมบอร์ดบริหารทันที
+              </p>
+            </div>
           </div>
 
           <form class="space-y-3" @submit.prevent="handleCreateAgent">
@@ -789,6 +1097,29 @@ function handleCreateAgent() {
                 placeholder="เช่น บุฟเฟต์, คุมสต็อก, Food Cost"
                 class="w-full rounded-xl bg-neutral-100 px-3 py-2 text-xs text-ink placeholder:text-muted focus:bg-white focus:outline-none focus:ring-1 focus:ring-black"
               />
+            </div>
+
+            <!-- Optional Custom Logic Override -->
+            <div class="rounded-xl border border-black/[0.06] bg-neutral-50/70 p-3 space-y-2">
+              <p class="text-[11px] font-bold text-ink">กำหนด Logic ความเชี่ยวชาญเพิ่มเติม (ไม่บังคับ):</p>
+              <div>
+                <label class="block text-[10.5px] font-medium text-muted mb-0.5">Framework หรือสูตรการคิด</label>
+                <input
+                  v-model="customFramework"
+                  type="text"
+                  placeholder="เว้นว่างเพื่อให้ระบบสร้างให้ตามหมวดหมู่ หรือกรอกเช่น FIFO Batch Variance Modeling"
+                  class="w-full rounded-lg bg-white px-2.5 py-1.5 text-xs text-ink placeholder:text-muted focus:outline-none focus:ring-1 focus:ring-black"
+                />
+              </div>
+              <div>
+                <label class="block text-[10.5px] font-medium text-muted mb-0.5">เหตุผลที่เก่งในด้านนี้ (Why Specialized)</label>
+                <input
+                  v-model="customWhySpecialized"
+                  type="text"
+                  placeholder="เว้นว่างเพื่อให้ระบบสังเคราะห์ให้อัตโนมัติ"
+                  class="w-full rounded-lg bg-white px-2.5 py-1.5 text-xs text-ink placeholder:text-muted focus:outline-none focus:ring-1 focus:ring-black"
+                />
+              </div>
             </div>
 
             <div class="flex items-center justify-end gap-2 pt-2">
