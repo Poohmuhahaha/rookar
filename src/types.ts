@@ -185,3 +185,31 @@ export const DATA_TYPES: Record<
     accent: 'violet',
   },
 }
+
+export type AgentPersonality = 'professional' | 'roast' | 'analytical' | 'creative' | 'direct'
+export type AgentCategory = 'finance' | 'market' | 'strategy' | 'operations' | 'marketing' | 'community'
+
+export interface AgentProfile {
+  id: string
+  name: string
+  role: string
+  avatar?: string
+  icon?: string
+  color: string
+  personality: AgentPersonality
+  personalityLabel: string
+  description: string
+  systemPrompt: string
+  category: AgentCategory
+  categoryLabel: string
+  creator: {
+    name: string
+    isOfficial?: boolean
+    avatar?: string
+  }
+  enabled: boolean
+  isCustom?: boolean
+  downloads?: number
+  rating?: number
+  specialtyTags?: string[]
+}

@@ -19,12 +19,16 @@ import {
   TrendingUp,
   Wallet,
   X,
+  Users,
+  Plus,
 } from '@lucide/vue'
 import AppSheet from '@/components/ui/AppSheet.vue'
 import ChatBubble from '@/components/features/ChatBubble.vue'
 import ChatHistory from '@/components/features/ChatHistory.vue'
 import WelcomeMark from '@/components/brand/WelcomeMark.vue'
 import PastelIcon from '@/components/brand/PastelIcon.vue'
+import AgentVaultModal from '@/components/features/AgentVaultModal.vue'
+import { agentsList } from '@/lib/agentVault'
 import { createConversation, createMessage, getConversations, getSession, listSources, saveConversations, streamAiReply } from '@/lib/mockApi'
 import { formatNumber } from '@/lib/format'
 import { sidebarCollapsed } from '@/lib/shell'
@@ -58,6 +62,8 @@ const isListening = ref(false)
 const stopRequested = ref(false)
 const contextOpen = ref(false)
 const historyOpen = ref(false)
+const showAgentVault = ref(false)
+const activeAgents = computed(() => agentsList.value.filter((a) => a.enabled))
 const historyCollapsed = ref(localStorage.getItem('rookar.assistant.history-collapsed') === '1')
 const initialized = ref(false)
 const messageList = ref<HTMLElement | null>(null)
@@ -525,6 +531,30 @@ async function copyMessage(text: string) {
 <template>
   <div class="flex h-full min-h-0 bg-white">
   <section class="relative flex min-w-0 flex-1 flex-col overflow-hidden bg-white">
+    <!-- Top Left: Multi-Agent Boardroom & Vault trigger -->
+    <div class="absolute left-4 top-3 z-20 flex items-center gap-2">
+      <button
+        type="button"
+        class="inline-flex items-center gap-2 rounded-full bg-[#f4f5f7] px-3 py-1.5 text-xs font-semibold text-ink transition hover:bg-[#e9ebef]"
+        title="จัดการทีมที่ปรึกษา AI และเปิดคลัง Agent Vault"
+        @click="showAgentVault = true"
+      >
+        <span class="flex -space-x-1.5 overflow-hidden">
+          <span
+            v-for="agent in activeAgents.slice(0, 3)"
+            :key="agent.id"
+            class="inline-flex h-4 w-4 items-center justify-center rounded-full text-[8px] font-bold text-white ring-1 ring-white"
+            :style="{ backgroundColor: agent.color }"
+          >
+            {{ agent.name.charAt(0) }}
+          </span>
+        </span>
+        <span class="hidden sm:inline">บอร์ดบริหาร AI ({{ activeAgents.length }} ตัว)</span>
+        <span class="sm:hidden">ทีม AI ({{ activeAgents.length }})</span>
+        <span class="rounded bg-black/5 px-1.5 py-0.2 text-[10px] text-muted font-medium">Vault</span>
+      </button>
+    </div>
+
     <button
       type="button"
       class="absolute right-3 top-3 z-20 inline-flex h-9 w-9 items-center justify-center rounded-full bg-[#f4f5f7] text-ink transition hover:bg-[#eceef1] xl:hidden"
@@ -585,6 +615,31 @@ async function copyMessage(text: string) {
             >
               <component :is="role.icon" class="h-3.5 w-3.5" />
               <span>{{ role.label }}</span>
+            </button>
+          </div>
+
+          <!-- Active Multi-Agent Boardroom Preview & Vault Button -->
+          <div class="mt-3 flex items-center justify-center gap-2">
+            <div class="flex items-center gap-1.5 rounded-full bg-neutral-100/80 px-3 py-1 text-[11px] text-muted">
+              <span class="font-medium">ทีม Agent ที่กำลังเปิดใช้งาน:</span>
+              <span class="flex items-center gap-1 font-semibold text-ink">
+                <span
+                  v-for="a in activeAgents"
+                  :key="a.id"
+                  class="inline-block rounded-md px-1.5 py-0.2 text-[10px] text-white"
+                  :style="{ backgroundColor: a.color }"
+                >
+                  {{ a.name.split(' ')[0] }}
+                </span>
+              </span>
+            </div>
+            <button
+              type="button"
+              class="inline-flex items-center gap-1 rounded-full border border-black/10 bg-white px-2.5 py-1 text-[11px] font-semibold text-ink transition hover:bg-black hover:text-white"
+              @click="showAgentVault = true"
+            >
+              <Plus class="h-3 w-3" />
+              <span>จัดทีม / Vault</span>
             </button>
           </div>
 
@@ -836,5 +891,8 @@ async function copyMessage(text: string) {
       @close="historyOpen = false"
     />
   </AppSheet>
+
+  <!-- Agent Vault & Custom Boardroom Modal -->
+  <AgentVaultModal v-model:open="showAgentVault" />
   </div>
 </template>
