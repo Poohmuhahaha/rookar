@@ -401,6 +401,44 @@ export function createCustomAgent(newAgent: Omit<AgentProfile, 'id' | 'downloads
   return agent
 }
 
+export function updateAgent(agentId: string, updates: Partial<AgentProfile>): AgentProfile | null {
+  const index = agentsList.value.findIndex((a) => a.id === agentId)
+  if (index === -1) return null
+
+  const existing = agentsList.value[index]
+  const updated: AgentProfile = {
+    ...existing,
+    ...updates,
+    expertiseLogic: updates.expertiseLogic || existing.expertiseLogic || generateCustomExpertiseLogic({ ...existing, ...updates }),
+  }
+  agentsList.value[index] = updated
+  persistAgents()
+  return updated
+}
+
+export function duplicateAndCustomizeAgent(agentId: string): AgentProfile | null {
+  const source = agentsList.value.find((a) => a.id === agentId)
+  if (!source) return null
+
+  const customized: AgentProfile = {
+    ...source,
+    id: `custom-${Date.now()}`,
+    name: `${source.name.replace(/\s*\(.*\)/, '')} (ฉบับร้านของฉัน)`,
+    isCustom: true,
+    creator: {
+      name: 'คุณ (ปรับแต่งเอง)',
+      isOfficial: false,
+    },
+    enabled: true,
+    downloads: 1,
+    rating: 5.0,
+    expertiseLogic: source.expertiseLogic ? { ...source.expertiseLogic } : generateCustomExpertiseLogic(source),
+  }
+  agentsList.value.unshift(customized)
+  persistAgents()
+  return customized
+}
+
 export function deleteCustomAgent(agentId: string) {
   agentsList.value = agentsList.value.filter((a) => a.id !== agentId)
   persistAgents()

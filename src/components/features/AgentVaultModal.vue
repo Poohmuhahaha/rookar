@@ -28,6 +28,8 @@ import {
   ChevronDown,
   ChevronUp,
   ShieldCheck,
+  Edit3,
+  Copy,
 } from '@lucide/vue'
 import AppModal from '@/components/ui/AppModal.vue'
 import AppButton from '@/components/ui/AppButton.vue'
@@ -39,6 +41,8 @@ import {
   updateAgentPermissions,
   isAgentAllowedInChat,
   generateCustomExpertiseLogic,
+  updateAgent,
+  duplicateAndCustomizeAgent,
 } from '@/lib/agentVault'
 import type { AgentCategory, AgentPersonality, AgentProfile } from '@/types'
 import { cn } from '@/lib/cn'
@@ -168,7 +172,8 @@ const filteredVaultAgents = computed(() => {
   })
 })
 
-// Create agent form
+// Create & Customize agent form
+const editingCustomAgentId = ref<string | null>(null)
 const newName = ref('')
 const newRole = ref('')
 const newCategory = ref<AgentCategory>('finance')
@@ -178,6 +183,43 @@ const newPrompt = ref('')
 const newTags = ref('')
 const customFramework = ref('')
 const customWhySpecialized = ref('')
+
+function startCustomizeAgent(agent: AgentProfile) {
+  newName.value = agent.isCustom
+    ? agent.name
+    : `${agent.name.replace(/\s*\(.*\)/, '').trim()} (ฉบับร้านของฉัน)`
+  newRole.value = agent.role
+  newCategory.value = agent.category
+  newPersonality.value = agent.personality
+  newDescription.value = agent.description
+  newPrompt.value = agent.systemPrompt
+  newTags.value = (agent.specialtyTags || []).join(', ')
+  customFramework.value = agent.expertiseLogic?.reasoningFramework || ''
+  customWhySpecialized.value = agent.expertiseLogic?.whySpecialized || ''
+
+  if (agent.isCustom) {
+    editingCustomAgentId.value = agent.id
+  } else {
+    // Cloned as new custom agent
+    editingCustomAgentId.value = null
+  }
+
+  inspectingAgent.value = null
+  editingAgent.value = null
+  currentTab.value = 'create'
+}
+
+function cancelCustomize() {
+  editingCustomAgentId.value = null
+  newName.value = ''
+  newRole.value = ''
+  newDescription.value = ''
+  newPrompt.value = ''
+  newTags.value = ''
+  customFramework.value = ''
+  customWhySpecialized.value = ''
+  currentTab.value = 'my-team'
+}
 
 const personalities: { id: AgentPersonality; label: string; desc: string }[] = [
   { id: 'analytical', label: 'วิเคราะห์ตัวเลขลึก', desc: 'เน้นสูตรคำนวณ แม่นยำ อิงสถิติ' },
@@ -221,20 +263,20 @@ function handleCreateAgent() {
     generatedLogic.whySpecialized = customWhySpecialized.value.trim()
   }
 
-  createCustomAgent({
-    ...partialAgent,
-    expertiseLogic: generatedLogic,
-  })
+  if (editingCustomAgentId.value) {
+    updateAgent(editingCustomAgentId.value, {
+      ...partialAgent,
+      expertiseLogic: generatedLogic,
+    })
+  } else {
+    createCustomAgent({
+      ...partialAgent,
+      expertiseLogic: generatedLogic,
+    })
+  }
 
   // Reset form
-  newName.value = ''
-  newRole.value = ''
-  newDescription.value = ''
-  newPrompt.value = ''
-  newTags.value = ''
-  customFramework.value = ''
-  customWhySpecialized.value = ''
-  currentTab.value = 'my-team'
+  cancelCustomize()
 }
 </script>
 
@@ -434,15 +476,26 @@ function handleCreateAgent() {
         </div>
 
         <!-- Footer Actions in Inspector -->
-        <div class="flex items-center justify-between pt-3 border-t border-black/[0.06]">
-          <button
-            type="button"
-            class="inline-flex items-center gap-1.5 rounded-full border border-black/10 bg-white px-3 py-1.5 text-xs font-semibold text-ink hover:bg-neutral-50 transition"
-            @click="openPermissionEditor(inspectingAgent)"
-          >
-            <Lock class="h-3 w-3 text-muted" />
-            <span>ตั้งค่าสิทธิ์ห้องแชทของตัวนี้</span>
-          </button>
+        <div class="flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-black/[0.06]">
+          <div class="flex items-center gap-2">
+            <button
+              type="button"
+              class="inline-flex items-center gap-1.5 rounded-full border border-black/10 bg-white px-3 py-1.5 text-xs font-semibold text-ink hover:bg-neutral-50 transition"
+              @click="openPermissionEditor(inspectingAgent)"
+            >
+              <Lock class="h-3 w-3 text-muted" />
+              <span>ตั้งค่าสิทธิ์แชท</span>
+            </button>
+
+            <button
+              type="button"
+              class="inline-flex items-center gap-1.5 rounded-full border border-black/10 bg-white px-3 py-1.5 text-xs font-semibold text-ink hover:bg-neutral-50 transition"
+              @click="startCustomizeAgent(inspectingAgent)"
+            >
+              <Edit3 class="h-3 w-3 text-muted" />
+              <span>{{ inspectingAgent.isCustom ? 'แก้ไขคำสั่ง & ตรรกะ' : 'โคลนมาปรับแต่งสำหรับร้าน' }}</span>
+            </button>
+          </div>
 
           <AppButton size="sm" @click="closeLogicInspector">
             ตกลง / ปิดหน้าต่าง
@@ -818,6 +871,16 @@ function handleCreateAgent() {
                 <div class="flex items-center gap-2">
                   <button
                     type="button"
+                    class="text-xs font-semibold text-brand-700 hover:text-brand-900 hover:underline flex items-center gap-1"
+                    title="ปรับแต่งคำสั่งและตรรกะของ Agent นี้สำหรับร้านของคุณ"
+                    @click="startCustomizeAgent(agent)"
+                  >
+                    <Edit3 class="h-3 w-3" />
+                    <span>{{ agent.isCustom ? 'แก้ไข' : 'ปรับแต่ง' }}</span>
+                  </button>
+
+                  <button
+                    type="button"
                     class="text-xs font-semibold text-ink-soft hover:text-black hover:underline"
                     @click="openPermissionEditor(agent)"
                   >
@@ -980,15 +1043,17 @@ function handleCreateAgent() {
           </div>
         </div>
 
-        <!-- TAB 3: CREATE CUSTOM AGENT FORM -->
+        <!-- TAB 3: CREATE / CUSTOMIZE AGENT FORM -->
         <div v-else class="pt-4 max-w-xl mx-auto space-y-4">
           <div class="text-center pb-2">
             <div class="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-black text-white font-bold text-lg mb-2">
-              AI
+              <component :is="editingCustomAgentId ? Edit3 : Bot" class="h-6 w-6 text-white" />
             </div>
-            <h3 class="text-base font-bold text-ink">สร้าง Agent ผู้เชี่ยวชาญเฉพาะทางของคุณเอง</h3>
+            <h3 class="text-base font-bold text-ink">
+              {{ editingCustomAgentId ? 'แก้ไขและปรับแต่ง Agent' : 'สร้างหรือปรับแต่ง Agent สำหรับร้านของคุณ' }}
+            </h3>
             <p class="text-xs text-muted mt-0.5">
-              กำหนดบทบาท นิสัยเฉพาะ และโจทย์ธุรกิจที่ต้องการให้ Agent ช่วยคิดวิเคราะห์
+              {{ editingCustomAgentId ? 'ปรับปรุงคำสั่ง Prompt, บทบาท, และ Framework ตรรกะให้ตอบโจทย์ธุรกิจของคุณ' : 'กำหนดบทบาท นิสัยเฉพาะ และโจทย์ธุรกิจที่ต้องการให้ Agent ช่วยคิดวิเคราะห์' }}
             </p>
           </div>
 
@@ -1123,11 +1188,11 @@ function handleCreateAgent() {
             </div>
 
             <div class="flex items-center justify-end gap-2 pt-2">
-              <AppButton variant="secondary" size="sm" type="button" @click="currentTab = 'my-team'">
+              <AppButton variant="secondary" size="sm" type="button" @click="cancelCustomize">
                 ยกเลิก
               </AppButton>
               <AppButton size="sm" type="submit">
-                บันทึกและเปิดใช้งานทันที
+                {{ editingCustomAgentId ? 'บันทึกการแก้ไข' : 'บันทึกและเปิดใช้งานทันที' }}
               </AppButton>
             </div>
           </form>
