@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { computed, onUnmounted, ref, watch, type Ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch, type Ref } from 'vue'
 import { Outlet, useRouter, useRouterState } from '@tanstack/vue-router'
-import { Menu } from '@lucide/vue'
+import { Menu, PanelLeftOpen } from '@lucide/vue'
 import AppSidebar from './AppSidebar.vue'
 import AppSheet from '@/components/ui/AppSheet.vue'
 import { getSession } from '@/lib/mockApi'
@@ -10,7 +10,9 @@ import {
   SIDEBAR_MIN_WIDTH,
   persistSidebarWidth,
   setSidebarWidth,
+  sidebarCollapsed,
   sidebarWidth,
+  toggleSidebar,
 } from '@/lib/shell'
 
 const router = useRouter()
@@ -51,8 +53,20 @@ function nudgeSidebar(delta: number) {
   persistSidebarWidth()
 }
 
+function handleKeyDown(event: KeyboardEvent) {
+  if ((event.metaKey || event.ctrlKey) && (event.key === '\\' || event.key === 'b')) {
+    event.preventDefault()
+    toggleSidebar()
+  }
+}
+
+onMounted(() => {
+  window.addEventListener('keydown', handleKeyDown)
+})
+
 onUnmounted(() => {
   stopResize?.()
+  window.removeEventListener('keydown', handleKeyDown)
 })
 
 watch(pathname, () => {
@@ -73,15 +87,16 @@ watch(pathname, () => {
       <!-- Unified Consistent Sidebar across all routes -->
       <div
         :class="[
-          'relative hidden h-full shrink-0 lg:block',
+          'relative hidden h-full shrink-0 lg:block overflow-hidden',
           !isResizing ? 'transition-[width] duration-200 ease-out' : '',
         ]"
-        :style="{ width: `${sidebarWidth}px` }"
+        :style="{ width: sidebarCollapsed ? '0px' : `${sidebarWidth}px` }"
       >
-        <aside class="h-full overflow-hidden bg-white">
+        <aside class="h-full overflow-hidden bg-white" :style="{ width: `${sidebarWidth}px` }">
           <AppSidebar />
         </aside>
         <div
+          v-if="!sidebarCollapsed"
           class="absolute inset-y-0 -right-1 z-10 hidden w-2 cursor-col-resize touch-none lg:block"
           role="separator"
           aria-orientation="vertical"
@@ -100,10 +115,23 @@ watch(pathname, () => {
       <main
         id="main-content"
         :class="[
-          'min-w-0 flex-1 overflow-hidden h-full',
+          'relative min-w-0 flex-1 overflow-hidden h-full',
           isAssistant ? '' : 'overflow-y-auto bg-white p-4 sm:p-6 lg:p-8',
+          !isAssistant && sidebarCollapsed ? 'lg:pl-16' : '',
         ]"
       >
+        <!-- Desktop Sidebar Expand Toggle (When collapsed) -->
+        <button
+          v-if="sidebarCollapsed"
+          type="button"
+          class="fixed left-3.5 top-3.5 z-30 hidden h-9 w-9 items-center justify-center rounded-xl bg-white border border-black/10 text-muted shadow-xs transition hover:bg-neutral-50 hover:text-ink lg:inline-flex"
+          aria-label="ขยายแถบเมนู (Ctrl+\)"
+          title="ขยายแถบเมนู (Ctrl+\)"
+          @click="toggleSidebar"
+        >
+          <PanelLeftOpen class="h-4 w-4" aria-hidden="true" />
+        </button>
+
         <Outlet />
       </main>
     </div>

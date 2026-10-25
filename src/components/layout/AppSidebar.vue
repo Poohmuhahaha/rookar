@@ -5,6 +5,7 @@ import {
   ChevronsUpDown,
   Database,
   LayoutDashboard,
+  PanelLeftClose,
   Sparkles,
   Upload,
   X,
@@ -12,6 +13,7 @@ import {
 import LogoMark from '@/components/brand/LogoMark.vue'
 import SettingsMenu from '@/components/layout/SettingsMenu.vue'
 import { getSession } from '@/lib/mockApi'
+import { toggleSidebar } from '@/lib/shell'
 
 const props = withDefaults(defineProps<{ closable?: boolean }>(), {
   closable: false,
@@ -56,6 +58,20 @@ function isActive(to: string, exact: boolean) {
         </span>
         <ChevronsUpDown class="h-4 w-4 shrink-0 text-faint" aria-hidden="true" />
       </Link>
+
+      <!-- Desktop Sidebar Toggle (Collapse) -->
+      <button
+        v-if="!closable"
+        type="button"
+        class="hidden h-9 w-9 shrink-0 items-center justify-center rounded-xl text-neutral-400 transition hover:bg-black/[0.04] hover:text-black lg:inline-flex"
+        aria-label="ย่อแถบเมนู (Ctrl+\)"
+        title="ย่อแถบเมนู (Ctrl+\)"
+        @click="toggleSidebar"
+      >
+        <PanelLeftClose class="h-4 w-4" aria-hidden="true" />
+      </button>
+
+      <!-- Mobile Close Button -->
       <button
         v-if="closable"
         type="button"

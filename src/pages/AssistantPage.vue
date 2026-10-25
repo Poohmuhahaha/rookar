@@ -548,7 +548,13 @@ async function copyMessage(text: string) {
   <div class="flex h-full min-h-0 bg-white">
   <section class="relative flex min-w-0 flex-1 flex-col overflow-hidden bg-white">
     <!-- Top Left: Multi-Agent Boardroom & Vault trigger -->
-    <div class="absolute left-4 top-3 z-20 flex items-center gap-2">
+    <div
+      class="absolute top-3 z-20 flex items-center gap-2 transition-all duration-200"
+      :class="[
+        'left-14',
+        !sidebarCollapsed ? 'lg:left-4' : 'lg:left-14',
+      ]"
+    >
       <button
         type="button"
         class="inline-flex items-center gap-1.5 rounded-full bg-[#f4f5f7] px-2.5 py-1 text-xs font-medium text-ink transition hover:bg-[#eceef1]"
