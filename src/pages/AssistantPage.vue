@@ -585,10 +585,7 @@ async function copyMessage(text: string) {
 
     <div
       ref="messageList"
-      :class="[
-        'no-scrollbar min-h-0 flex-1 overflow-y-auto px-4 pb-4 sm:px-6 sm:pb-6',
-        sidebarCollapsed ? 'pt-16' : 'pt-16 xl:pt-8',
-      ]"
+      class="no-scrollbar min-h-0 flex-1 overflow-y-auto px-4 pb-4 pt-16 sm:px-6 sm:pb-6"
       role="log"
       aria-label="บทสนทนากับ AI"
       aria-live="polite"

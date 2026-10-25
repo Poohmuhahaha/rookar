@@ -84,19 +84,19 @@ watch(pathname, () => {
     </a>
 
     <div class="flex h-full w-full overflow-hidden bg-white">
-      <!-- Unified Consistent Sidebar across all routes -->
-      <div
+      <!-- Unified Consistent Sidebar across all routes (Silky Smooth Negative-Margin Slide) -->
+      <aside
         :class="[
-          'relative hidden h-full shrink-0 lg:block overflow-hidden',
-          !isResizing ? 'transition-[width] duration-200 ease-out' : '',
+          'relative hidden h-full shrink-0 bg-white border-r border-black/[0.06] lg:block',
+          !isResizing ? 'transition-[margin] duration-300 ease-in-out will-change-[margin-left]' : '',
         ]"
-        :style="{ width: sidebarCollapsed ? '0px' : `${sidebarWidth}px` }"
+        :style="{
+          width: `${sidebarWidth}px`,
+          marginLeft: sidebarCollapsed ? `-${sidebarWidth}px` : '0px',
+        }"
       >
-        <aside class="h-full overflow-hidden bg-white" :style="{ width: `${sidebarWidth}px` }">
-          <AppSidebar />
-        </aside>
+        <AppSidebar />
         <div
-          v-if="!sidebarCollapsed"
           class="absolute inset-y-0 -right-1 z-10 hidden w-2 cursor-col-resize touch-none lg:block"
           role="separator"
           aria-orientation="vertical"
@@ -109,7 +109,7 @@ watch(pathname, () => {
           @keydown.left.prevent="nudgeSidebar(-16)"
           @keydown.right.prevent="nudgeSidebar(16)"
         ></div>
-      </div>
+      </aside>
 
       <!-- Main Content Area -->
       <main
@@ -117,14 +117,17 @@ watch(pathname, () => {
         :class="[
           'relative min-w-0 flex-1 overflow-hidden h-full',
           isAssistant ? '' : 'overflow-y-auto bg-white p-4 sm:p-6 lg:p-8',
-          !isAssistant && sidebarCollapsed ? 'lg:pl-16' : '',
         ]"
       >
-        <!-- Desktop Sidebar Expand Toggle (When collapsed) -->
+        <!-- Desktop Sidebar Expand Toggle (When collapsed, smoothly fades in) -->
         <button
-          v-if="sidebarCollapsed"
           type="button"
-          class="fixed left-3.5 top-3.5 z-30 hidden h-9 w-9 items-center justify-center rounded-xl bg-white border border-black/10 text-muted shadow-xs transition hover:bg-neutral-50 hover:text-ink lg:inline-flex"
+          :class="[
+            'fixed left-3.5 top-3.5 z-30 hidden h-9 w-9 items-center justify-center rounded-xl bg-white border border-black/10 text-muted shadow-xs transition-all duration-300 hover:bg-neutral-50 hover:text-ink lg:inline-flex',
+            sidebarCollapsed
+              ? 'opacity-100 pointer-events-auto scale-100 delay-150'
+              : 'opacity-0 pointer-events-none scale-90 delay-0',
+          ]"
           aria-label="ขยายแถบเมนู (Ctrl+\)"
           title="ขยายแถบเมนู (Ctrl+\)"
           @click="toggleSidebar"
