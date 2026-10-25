@@ -545,7 +545,7 @@ async function copyMessage(text: string) {
 </script>
 
 <template>
-  <div class="flex h-full min-h-0 bg-white">
+  <div class="flex h-full min-h-0 overflow-hidden bg-white">
   <section class="relative flex min-w-0 flex-1 flex-col overflow-hidden bg-white">
     <!-- Top Left: Multi-Agent Boardroom & Vault trigger -->
     <div
@@ -574,9 +574,13 @@ async function copyMessage(text: string) {
       <PanelRightOpen class="h-4 w-4" aria-hidden="true" />
     </button>
     <button
-      v-if="historyCollapsed"
       type="button"
-      class="absolute right-3 top-3 z-20 hidden h-9 w-9 items-center justify-center rounded-full bg-[#f4f5f7] text-ink transition hover:bg-[#eceef1] xl:inline-flex"
+      :class="[
+        'absolute right-3 top-3 z-20 hidden h-9 w-9 items-center justify-center rounded-full bg-[#f4f5f7] text-ink transition-all duration-300 hover:bg-[#eceef1] xl:inline-flex',
+        historyCollapsed
+          ? 'opacity-100 pointer-events-auto scale-100 delay-150'
+          : 'opacity-0 pointer-events-none scale-90 delay-0',
+      ]"
       aria-label="เปิดประวัติแชท"
       @click="historyCollapsed = false"
     >
@@ -808,7 +812,17 @@ async function copyMessage(text: string) {
     </div>
   </section>
 
-  <aside v-if="!historyCollapsed" class="hidden w-[332px] shrink-0 p-3 xl:block" aria-label="ประวัติการสนทนา">
+  <!-- Desktop Chat History Sidebar (Silky Smooth Negative-Margin Slide) -->
+  <aside
+    :class="[
+      'relative hidden h-full w-[332px] shrink-0 p-3 xl:block',
+      'transition-[margin] duration-300 ease-in-out will-change-[margin-right]',
+    ]"
+    :style="{
+      marginRight: historyCollapsed ? '-332px' : '0px',
+    }"
+    aria-label="ประวัติการสนทนา"
+  >
     <div class="card-fade-static h-full overflow-hidden">
       <ChatHistory
         :conversations="history"
