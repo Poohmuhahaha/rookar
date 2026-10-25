@@ -551,23 +551,11 @@ async function copyMessage(text: string) {
     <div class="absolute left-4 top-3 z-20 flex items-center gap-2">
       <button
         type="button"
-        class="inline-flex items-center gap-2 rounded-full bg-[#f4f5f7] px-3 py-1.5 text-xs font-semibold text-ink transition hover:bg-[#e9ebef]"
-        title="จัดการทีมที่ปรึกษา AI, ดู Logic ความเชี่ยวชาญ และเปิดคลัง Agent Vault"
+        class="inline-flex items-center gap-1.5 rounded-full bg-[#f4f5f7] px-2.5 py-1 text-xs font-medium text-ink transition hover:bg-[#eceef1]"
         @click="openVaultGeneral"
       >
-        <span class="flex -space-x-1.5 overflow-hidden">
-          <span
-            v-for="agent in activeBoardroomAgents.slice(0, 3)"
-            :key="agent.id"
-            class="inline-flex h-4 w-4 items-center justify-center rounded-full text-[8px] font-bold text-white ring-1 ring-white"
-            :style="{ backgroundColor: agent.color }"
-          >
-            {{ agent.name.charAt(0) }}
-          </span>
-        </span>
-        <span class="hidden sm:inline">บอร์ดบริหารในแชทนี้ ({{ activeBoardroomAgents.length }} ตัว)</span>
-        <span class="sm:hidden">ทีม AI ({{ activeBoardroomAgents.length }})</span>
-        <span class="rounded bg-black/5 px-1.5 py-0.2 text-[10px] text-muted font-medium">Logic & Vault</span>
+        <Users class="h-3.5 w-3.5 text-muted" />
+        <span>ทีม AI ({{ activeBoardroomAgents.length }})</span>
       </button>
     </div>
 
@@ -634,33 +622,28 @@ async function copyMessage(text: string) {
             </button>
           </div>
 
-          <!-- Active Multi-Agent Boardroom Preview & Vault Button -->
-          <div class="mt-3 flex flex-wrap items-center justify-center gap-2">
-            <div class="flex flex-wrap items-center gap-1.5 rounded-full bg-neutral-100/80 px-3 py-1 text-[11px] text-muted">
-              <span class="font-medium">ทีม Agent ในแชทนี้:</span>
-              <span class="flex flex-wrap items-center gap-1 font-semibold text-ink">
-                <button
-                  v-for="a in activeBoardroomAgents"
-                  :key="a.id"
-                  type="button"
-                  class="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] text-white hover:opacity-90 transition cursor-pointer"
-                  :style="{ backgroundColor: a.color }"
-                  title="คลิกเพื่อตรวจดู Logic ความเชี่ยวชาญของ Agent นี้"
-                  @click="openAgentLogic(a.id)"
-                >
-                  <span>{{ a.name.split(' ')[0] }}</span>
-                  <Lightbulb class="h-2.5 w-2.5 text-amber-200 fill-amber-300" />
-                </button>
-              </span>
+          <!-- Active Agents Preview -->
+          <div class="mt-4 flex items-center justify-center gap-2 text-xs text-muted">
+            <span class="text-[11.5px]">ทีม AI:</span>
+            <div class="flex items-center gap-1.5">
+              <button
+                v-for="a in activeBoardroomAgents"
+                :key="a.id"
+                type="button"
+                class="rounded-full bg-neutral-100 px-2.5 py-0.5 text-[11px] font-medium text-ink transition hover:bg-neutral-200"
+                @click="openAgentLogic(a.id)"
+              >
+                {{ a.name.split(' ')[0] }}
+              </button>
+              <button
+                type="button"
+                class="rounded-full p-1 text-muted transition hover:bg-neutral-100 hover:text-ink"
+                title="จัดการทีม Agent"
+                @click="openVaultGeneral"
+              >
+                <Plus class="h-3 w-3" />
+              </button>
             </div>
-            <button
-              type="button"
-              class="inline-flex items-center gap-1 rounded-full border border-black/10 bg-white px-2.5 py-1 text-[11px] font-semibold text-ink transition hover:bg-black hover:text-white cursor-pointer"
-              @click="openVaultGeneral"
-            >
-              <Plus class="h-3 w-3" />
-              <span>จัดทีม / Vault</span>
-            </button>
           </div>
 
           <div class="mt-7 grid grid-cols-1 gap-3.5 text-left sm:grid-cols-3">
