@@ -19,6 +19,7 @@ const props = withDefaults(
     inputmode?: 'text' | 'numeric' | 'decimal' | 'email' | 'tel' | 'search'
     search?: boolean
     size?: 'md' | 'lg'
+    surface?: boolean
     modelValue?: string
   }>(),
   {
@@ -28,6 +29,7 @@ const props = withDefaults(
     readonly: false,
     search: false,
     size: 'md',
+    surface: false,
     modelValue: '',
   },
 )
@@ -91,7 +93,9 @@ const messageId = computed(() => `${fieldId.value}-message`)
             type === 'password' && 'pr-11',
             error
               ? 'bg-danger-soft/40 focus:bg-danger-soft/60'
-              : 'bg-ink-50 focus:bg-ink-100',
+              : surface
+                ? 'bg-white focus:bg-white'
+                : 'bg-ink-50 focus:bg-ink-100',
           )
         "
         @blur="emit('blur', $event)"

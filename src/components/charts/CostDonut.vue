@@ -37,10 +37,14 @@ const segments = computed(() => {
 </script>
 
 <template>
-  <figure class="flex items-center gap-5">
+  <figure class="flex items-center gap-4 sm:gap-5">
     <figcaption class="sr-only">สัดส่วนต้นทุนรวม</figcaption>
     <div class="relative shrink-0">
-      <svg viewBox="0 0 140 140" class="h-[140px] w-[140px]" aria-hidden="true">
+      <svg
+        viewBox="0 0 140 140"
+        class="h-[152px] w-[152px] sm:h-[168px] sm:w-[168px] xl:h-[156px] xl:w-[156px] 2xl:h-[184px] 2xl:w-[184px] min-[1800px]:h-[200px] min-[1800px]:w-[200px]"
+        aria-hidden="true"
+      >
         <circle :cx="center" :cy="center" :r="radius" fill="none" stroke="var(--color-ink-100)" stroke-width="16" />
         <g :key="animKey" class="donut-segments-anim" :transform="`rotate(-90 ${center} ${center})`">
           <circle
@@ -66,6 +70,7 @@ const segments = computed(() => {
             fill="var(--color-muted)"
             font-size="10"
             font-family="Inter, Prompt, sans-serif"
+            class="donut-center-label"
           >
             ต้นทุนรวม
           </text>
@@ -77,6 +82,7 @@ const segments = computed(() => {
             font-size="14"
             font-weight="600"
             font-family="Inter, Prompt, sans-serif"
+            class="donut-center-value"
           >
             {{ formatCompact(total) }}
           </text>
@@ -84,15 +90,21 @@ const segments = computed(() => {
       </svg>
     </div>
 
-    <ul class="min-w-0 flex-1 space-y-3">
+    <ul class="min-w-0 flex-1 space-y-3.5">
       <li v-for="slice in slices" :key="slice.key" class="flex items-start gap-2.5">
         <span class="mt-1 h-2.5 w-2.5 shrink-0 rounded-[3px]" :style="{ backgroundColor: slice.color }" aria-hidden="true" />
         <div class="min-w-0 flex-1">
           <div class="flex items-baseline justify-between gap-2">
-            <span class="truncate text-xs text-ink-soft">{{ slice.label }}</span>
-            <span class="tabular shrink-0 text-xs font-medium text-ink">{{ slice.share }}%</span>
+            <span class="text-xs font-medium leading-snug text-ink-soft">{{ slice.label }}</span>
+            <span class="tabular shrink-0 text-xs font-semibold text-ink">{{ slice.share }}%</span>
           </div>
           <p class="tabular mt-0.5 text-[11.5px] text-muted">{{ formatCurrency(slice.value) }}</p>
+          <div class="mt-1.5 h-1.5 overflow-hidden rounded-full bg-black/[0.06]" aria-hidden="true">
+            <div
+              class="h-full rounded-full transition-[width] duration-700"
+              :style="{ width: `${slice.share}%`, backgroundColor: slice.color }"
+            />
+          </div>
         </div>
       </li>
     </ul>

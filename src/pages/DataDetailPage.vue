@@ -165,7 +165,7 @@ function askAiAboutDataset() {
         <div class="relative z-10 flex h-full flex-col justify-between">
           <dt class="text-[11.5px] font-medium text-ink-soft">สถานะคุณภาพ</dt>
           <dd class="mt-3 flex items-center gap-1.5">
-            <AppBadge :tone="qualityMeta[source.quality].tone" dot>
+            <AppBadge :tone="qualityMeta[source.quality].tone">
               {{ qualityMeta[source.quality].label }}
             </AppBadge>
           </dd>
@@ -194,7 +194,10 @@ function askAiAboutDataset() {
       <div class="relative z-10 space-y-4">
         <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h2 class="text-[17px] font-bold text-ink">ตัวอย่างข้อมูลจริง (Row Preview)</h2>
+            <div class="flex items-center gap-2">
+              <h2 class="text-[17px] font-bold text-ink">ตัวอย่างข้อมูล (Row Preview)</h2>
+              <AppBadge v-if="source.isDemo" tone="warning">ข้อมูลตัวอย่าง</AppBadge>
+            </div>
             <p class="text-[12.5px] text-muted">แสดงข้อมูลตัวอย่างที่ ROOKAR ใช้วิเคราะห์และส่งต่อให้ AI</p>
           </div>
           <div class="relative w-full sm:max-w-xs">

@@ -19,13 +19,25 @@ watch(
 const width = ref(760)
 const height = ref(292)
 const compact = ref(false)
+const textScale = ref(1)
 const pad = computed(() =>
   compact.value
-    ? { top: 16, right: 10, bottom: 30, left: 38 }
-    : { top: 18, right: 14, bottom: 34, left: 48 },
+    ? {
+        top: 16,
+        right: 10,
+        bottom: 30 + Math.round((textScale.value - 1) * 16),
+        left: Math.round(38 * textScale.value),
+      }
+    : {
+        top: 18,
+        right: 14,
+        bottom: 34 + Math.round((textScale.value - 1) * 16),
+        left: Math.round(48 * textScale.value),
+      },
 )
 const plotWidth = computed(() => width.value - pad.value.left - pad.value.right)
 const plotHeight = computed(() => height.value - pad.value.top - pad.value.bottom)
+const xLabelY = computed(() => height.value - 9 - Math.round((textScale.value - 1) * 8))
 
 const rawId = useId()
 const gradientId = computed(() => `revenue-${rawId.replace(/[^a-zA-Z0-9_-]/g, '')}`)
@@ -33,7 +45,14 @@ const wrapper = ref<HTMLElement | null>(null)
 const activeIndex = ref<number | null>(null)
 let resizeObserver: ResizeObserver | null = null
 
+function updateTextScale() {
+  if (typeof window === 'undefined') return
+  textScale.value = window.innerWidth >= 1440 ? 1.5 : 1
+}
+
 onMounted(() => {
+  updateTextScale()
+  window.addEventListener('resize', updateTextScale)
   if (!wrapper.value) return
   resizeObserver = new ResizeObserver((entries) => {
     const available = entries[0]?.contentRect.width ?? 760
@@ -44,7 +63,10 @@ onMounted(() => {
   resizeObserver.observe(wrapper.value)
 })
 
-onUnmounted(() => resizeObserver?.disconnect())
+onUnmounted(() => {
+  resizeObserver?.disconnect()
+  window.removeEventListener('resize', updateTextScale)
+})
 
 const maxValue = computed(() => {
   const max = Math.max(...props.series.map((point) => Math.max(point.revenue, point.profit)), 1)
@@ -196,6 +218,7 @@ function handleFocus() {
           fill="var(--color-muted)"
           :font-size="compact ? 10 : 11"
           font-family="Inter, Prompt, sans-serif"
+          class="chart-axis-label"
         >
           {{ formatCompact(tick.value) }}
         </text>
@@ -228,11 +251,12 @@ function handleFocus() {
           v-for="point in xLabels"
           :key="`x-${point.label}-${point.index}`"
           :x="xFor(point.index)"
-          :y="height - 9"
-          text-anchor="middle"
+          :y="xLabelY"
+          :text-anchor="point.index === 0 ? 'start' : point.index === series.length - 1 ? 'end' : 'middle'"
           fill="var(--color-muted)"
           :font-size="compact ? 10 : 11"
           font-family="Inter, Prompt, sans-serif"
+          class="chart-axis-label"
         >
           {{ point.label }}
         </text>

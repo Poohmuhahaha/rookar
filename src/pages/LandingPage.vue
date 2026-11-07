@@ -98,8 +98,7 @@ function toggleFaq(index: number) {
     <section class="relative overflow-hidden pt-12 pb-16 md:pt-20 md:pb-24">
       <div class="mx-auto max-w-4xl px-6 text-center">
         <!-- Badge -->
-        <div class="inline-flex flex-wrap items-center justify-center gap-2 rounded-full bg-white px-4 py-1.5 text-xs font-medium text-neutral-800 mb-6 shadow-xs">
-          <span class="flex h-2 w-2 rounded-full bg-black" />
+        <div class="mb-6 inline-flex flex-wrap items-center justify-center gap-2 rounded-full bg-white px-4 py-1.5 text-xs font-medium text-neutral-800">
           <span class="font-bold">ROOK-AR (รู้ค้า)</span>
           <span class="text-neutral-400">·</span>
           <span>ai-Augmented Revenue for business ROOKie</span>

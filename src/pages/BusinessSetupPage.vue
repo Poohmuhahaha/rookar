@@ -1,33 +1,40 @@
 <script setup lang="ts">
 import { computed, reactive, ref } from 'vue'
-import { Link, useRouter } from '@tanstack/vue-router'
+import { useRouter } from '@tanstack/vue-router'
+import type { Component } from 'vue'
 import {
   ArrowLeft,
   ArrowRight,
   Check,
   CircleHelp,
   Coffee,
-  Globe2,
+  Fuel,
+  HeartPulse,
   Lightbulb,
-  Loader2,
-  LogOut,
   Rocket,
-  ShoppingBag,
+  ShieldCheck,
   Sparkles,
-  Store,
   Target,
   TrendingUp,
+  Truck,
   Wallet,
-  Wrench,
+  Zap,
 } from '@lucide/vue'
-import BrandLogo from '@/components/brand/BrandLogo.vue'
 import AppButton from '@/components/ui/AppButton.vue'
 import AppStepper from '@/components/ui/AppStepper.vue'
+import PageHeader from '@/components/ui/PageHeader.vue'
 import InfoTip from '@/components/ui/InfoTip.vue'
 import SelectField from '@/components/ui/SelectField.vue'
 import TextField from '@/components/ui/TextField.vue'
+import ImportPage from '@/pages/ImportPage.vue'
 import { cn } from '@/lib/cn'
-import { getSession, logout, saveBusiness, skipBusiness } from '@/lib/mockApi'
+import {
+  FOCUS_INDUSTRIES,
+  normalizeIndustryId,
+  type IndustryId,
+} from '@/lib/industries'
+import { getSession, saveBusiness, skipBusiness } from '@/lib/mockApi'
+import { setIndustryFocus } from '@/lib/industryFocus'
 import { useToast } from '@/lib/toast'
 
 const router = useRouter()
@@ -37,29 +44,61 @@ const session = getSession()
 const steps = [
   { label: 'ข้อมูลธุรกิจ', hint: 'พื้นฐาน' },
   { label: 'เป้าหมาย', hint: 'สิ่งที่อยากได้' },
+  { label: 'นำเข้าข้อมูล', hint: 'ไม่บังคับ' },
   { label: 'พร้อมเริ่ม', hint: 'ตรวจสอบ' },
 ]
 
 const current = ref(0)
 const loading = ref(false)
+const imported = ref(false)
 const errors = reactive<{ name?: string; type?: string; employees?: string; goals?: string }>({})
 
 const form = reactive({
   name: session?.business?.name ?? '',
-  type: session?.business?.type ?? '',
+  type: session?.business?.type ? normalizeIndustryId(session.business.type) : '',
   employees: session?.business?.employees ?? '',
   revenueRange: session?.business?.revenueRange ?? '',
   goals: [...(session?.business?.goals ?? [])],
 })
 
-const businessTypes = [
-  { value: 'fnb', label: 'อาหารและเครื่องดื่ม', description: 'ร้านอาหาร คาเฟ่ เบเกอรี', icon: Coffee },
-  { value: 'retail', label: 'ค้าปลีก', description: 'ร้านค้า สินค้าอุปโภค', icon: Store },
-  { value: 'ecommerce', label: 'อีคอมเมิร์ซ', description: 'ขายออนไลน์ มาร์เก็ตเพลส', icon: ShoppingBag },
-  { value: 'services', label: 'บริการ', description: 'ที่ปรึกษา ซ่อมบำรุง', icon: Wrench },
-  { value: 'manufacturing', label: 'การผลิต', description: 'โรงงาน สินค้าสั่งทำ', icon: Globe2 },
-  { value: 'other', label: 'อื่น ๆ', description: 'ธุรกิจรูปแบบอื่น', icon: Sparkles },
-]
+const industryIcons: Record<IndustryId, Component> = {
+  logistics: Truck,
+  'energy-fuel': Fuel,
+  ev: Zap,
+  healthcare: HeartPulse,
+  'quantum-security': ShieldCheck,
+  fnb: Coffee,
+}
+
+const businessTypes = FOCUS_INDUSTRIES.map((industry) => {
+  const notes = [industry.salesNote ?? ''].filter(Boolean)
+  return {
+    value: industry.id,
+    label: industry.label,
+    shortLabel: industry.shortLabel,
+    description: notes.length > 0 ? `${industry.description} · ${notes.join(' · ')}` : industry.description,
+    icon: industryIcons[industry.id],
+    parentId: industry.parentId,
+  }
+})
+
+const topLevelBusinessTypes = businessTypes
+  .filter((type) => !type.parentId)
+  .map((type) => ({
+    ...type,
+    children: businessTypes.filter((child) => child.parentId === type.value),
+  }))
+
+type BusinessType = (typeof topLevelBusinessTypes)[number]
+
+function isGroupActive(type: BusinessType) {
+  return form.type === type.value || type.children.some((child) => child.value === form.type)
+}
+
+function selectBusinessType(value: string) {
+  form.type = value
+  errors.type = undefined
+}
 
 const employeeOptions = [
   { value: '1', label: '1 คน (เจ้าของคนเดียว)' },
@@ -88,9 +127,6 @@ const goalOptions = [
 ]
 
 const selectedType = computed(() => businessTypes.find((item) => item.value === form.type))
-const progress = computed(() => ((current.value + 1) / steps.length) * 100)
-const initials = computed(() => session?.user.initials ?? 'RK')
-const avatarUrl = computed(() => session?.user.avatarUrl ?? '/avatar.jpg')
 
 function validateStep() {
   errors.name = undefined
@@ -117,6 +153,15 @@ function back() {
   if (current.value > 0) current.value -= 1
 }
 
+function skipImport() {
+  if (current.value === 2) current.value = 3
+}
+
+function completeImport() {
+  imported.value = true
+  current.value = 3
+}
+
 function toggleGoal(goal: string) {
   errors.goals = undefined
   const index = form.goals.indexOf(goal)
@@ -131,7 +176,7 @@ function toggleGoal(goal: string) {
   form.goals.push(goal)
 }
 
-async function finish(target: 'app' | 'import') {
+async function finish() {
   if (loading.value || !session) return
   loading.value = true
   try {
@@ -143,8 +188,9 @@ async function finish(target: 'app' | 'import') {
       revenueRange: form.revenueRange,
       goals: form.goals,
     })
-    toast.success('ตั้งค่าธุรกิจเรียบร้อย', target === 'import' ? 'เริ่มนำเข้าข้อมูลแรกได้เลย' : 'พร้อมเริ่มแชทกับ ROOKAR')
-    await router.navigate({ to: target === 'import' ? '/app/import' : '/app/assistant' })
+    setIndustryFocus(form.type as IndustryId)
+    toast.success('ตั้งค่าธุรกิจเรียบร้อย', 'พร้อมเริ่มแชทกับ ROOKAR')
+    await router.navigate({ to: '/app/assistant' })
   } catch (error) {
     toast.error('บันทึกไม่สำเร็จ', error instanceof Error ? error.message : 'กรุณาลองใหม่อีกครั้ง')
   } finally {
@@ -164,140 +210,164 @@ async function skip() {
   }
 }
 
-async function signOut() {
-  await logout()
-  await router.navigate({ to: '/login' })
-}
 </script>
 
 <template>
-  <div class="min-h-dvh bg-canvas">
-    <header class="mx-auto flex max-w-5xl items-center justify-between gap-4 px-5 py-5 sm:px-8">
-      <Link to="/" aria-label="ROOKAR หน้าหลัก">
-        <BrandLogo :mark-size="34" />
-      </Link>
-      <div class="flex items-center gap-1.5">
-        <a
-          href="mailto:hello@rookar.co"
-          class="inline-flex h-10 items-center gap-1.5 rounded-lg px-2.5 text-xs font-medium text-muted transition hover:bg-ink-50 hover:text-brand-700"
-        >
-          <CircleHelp class="h-3.5 w-3.5" aria-hidden="true" />
-          <span class="hidden sm:inline">ต้องการความช่วยเหลือ?</span>
-          <span class="sm:hidden">ช่วยเหลือ</span>
-        </a>
-        <button
-          type="button"
-          class="inline-flex h-10 items-center gap-1.5 rounded-lg px-2.5 text-xs font-medium text-muted transition hover:bg-ink-50 hover:text-brand-700"
-          aria-label="ออกจากระบบ"
-          @click="signOut"
-        >
-          <LogOut class="h-3.5 w-3.5" aria-hidden="true" />
-          <span class="hidden sm:inline">ออกจากระบบ</span>
-        </button>
-        <div class="ml-1 flex h-8 w-8 items-center justify-center overflow-hidden rounded-full bg-neutral-200">
-          <img :src="avatarUrl" alt="Profile" class="h-full w-full object-cover" />
-        </div>
-      </div>
-    </header>
+  <PageHeader
+    title="ตั้งค่าธุรกิจ"
+    description="ข้อมูลนี้ช่วยให้ ROOKAR ตีความตัวเลขและให้คำแนะนำที่ตรงกับธุรกิจของคุณมากขึ้น"
+  >
+    <template #actions>
+      <a
+        href="mailto:hello@rookar.co"
+        class="inline-flex h-10 items-center gap-1.5 rounded-lg px-2.5 text-xs font-medium text-muted transition hover:bg-ink-50 hover:text-brand-700"
+      >
+        <CircleHelp class="h-3.5 w-3.5" aria-hidden="true" />
+        ต้องการความช่วยเหลือ?
+      </a>
+    </template>
+  </PageHeader>
 
-    <main class="mx-auto max-w-2xl space-y-4 px-4 pb-14 sm:px-6">
-      <div class="card-fade-static p-6 sm:p-8">
+  <div class="space-y-4">
+
+      <div class="rounded-[24px] bg-[#eef0f2] p-5 sm:p-6">
         <div class="relative z-10">
-          <AppStepper :current="current" :steps="steps" />
-          <div class="mt-4 h-1 overflow-hidden rounded-full bg-ink-100" aria-hidden="true">
-            <div class="h-full bg-brand-700 transition-all duration-500" :style="{ width: `${progress}%` }" />
-          </div>
+          <AppStepper :current="current" :steps="steps" variant="connected" />
         </div>
       </div>
 
-      <section class="card-fade-static p-6 sm:p-8">
+      <section class="rounded-[24px] bg-[#eef0f2] p-6 sm:p-8">
         <div class="relative z-10">
         <Transition name="step" mode="out-in">
           <form v-if="current === 0" key="details" @submit.prevent="next">
-            <p class="text-[11px] font-medium text-brand-700">ขั้นที่ 1 จาก 3</p>
-            <h1 class="mt-2 text-h2 font-semibold tracking-tight text-ink">เล่าธุรกิจของคุณให้เรารู้จัก</h1>
-            <p class="mt-2 text-[13px] leading-relaxed text-muted">
-              ข้อมูลนี้ช่วยให้ ROOKAR ตีความตัวเลขและให้คำแนะนำที่ตรงกับธุรกิจคุณมากขึ้น
-            </p>
+            <div class="flex items-center gap-1.5">
+              <h1 class="text-h2 font-semibold tracking-tight text-ink">เล่าธุรกิจของคุณให้เรารู้จัก</h1>
+              <InfoTip
+                text="ข้อมูลนี้ช่วยให้ ROOKAR ตีความตัวเลขและให้คำแนะนำที่ตรงกับธุรกิจคุณมากขึ้น"
+                side="bottom"
+              />
+            </div>
 
-            <div class="mt-6">
+            <div class="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
               <TextField
                 v-model="form.name"
                 label="ชื่อธุรกิจ"
                 placeholder="เช่น บลูมมิ่ง คอฟฟี่"
                 size="lg"
                 required
+                surface
                 :error="errors.name"
               />
-            </div>
-
-            <fieldset class="mt-6">
-              <legend class="mb-2 flex items-center gap-1.5 text-[13px] font-medium text-ink-soft">
-                ประเภทธุรกิจ
-                <span class="text-danger" aria-hidden="true">*</span>
-              </legend>
-              <div class="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
-                <button
-                  v-for="type in businessTypes"
-                  :key="type.value"
-                  type="button"
-                  :class="
-                    cn(
-                      'group flex items-center gap-3 rounded-2xl p-3.5 text-left transition-all',
-                      form.type === type.value ? 'bg-black text-white' : 'bg-neutral-100/80 text-ink hover:bg-neutral-200/70',
-                    )
-                  "
-                  :aria-pressed="form.type === type.value"
-                  @click="form.type = type.value; errors.type = undefined"
-                >
-                  <component
-                    :is="type.icon"
-                    :class="cn('h-4 w-4 shrink-0 transition-colors', form.type === type.value ? 'text-white' : 'text-neutral-500')"
-                    aria-hidden="true"
-                  />
-                  <span class="min-w-0 flex-1">
-                    <span :class="cn('block text-[13px] font-semibold', form.type === type.value ? 'text-white' : 'text-ink')">{{ type.label }}</span>
-                    <span :class="cn('mt-0.5 block truncate text-[11.5px]', form.type === type.value ? 'text-neutral-300' : 'text-muted')">{{ type.description }}</span>
-                  </span>
-                  <Check v-if="form.type === type.value" class="ml-auto h-4 w-4 shrink-0 text-white" aria-hidden="true" />
-                </button>
-              </div>
-              <p v-if="errors.type" class="mt-1.5 text-[12.5px] text-danger">{{ errors.type }}</p>
-            </fieldset>
-
-            <div class="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div>
-                <SelectField
-                  v-model="form.employees"
-                  label="จำนวนพนักงาน"
-                  placeholder="เลือกจำนวน"
-                  :options="employeeOptions"
-                  required
-                  :error="errors.employees"
-                />
-              </div>
+              <SelectField
+                v-model="form.employees"
+                label="จำนวนพนักงาน"
+                placeholder="เลือกจำนวน"
+                :options="employeeOptions"
+                size="lg"
+                required
+                surface
+                :error="errors.employees"
+              />
               <SelectField
                 v-model="form.revenueRange"
                 label="รายได้ต่อปี (โดยประมาณ)"
                 placeholder="เลือกช่วงรายได้"
                 :options="revenueOptions"
+                size="lg"
+                surface
               />
             </div>
-            <p class="mt-2 flex items-center gap-1 text-[11.5px] text-muted">
-              <InfoTip text="ใช้เป็นข้อมูลประกอบการวิเคราะห์ ไม่ได้ใช้ยืนยันตัวตนหรือยื่นภาษี" />
-              ใช้เพื่อปรับคำแนะนำให้เหมาะกับขนาดธุรกิจของคุณ
-            </p>
 
-            <div class="mt-7 flex flex-col-reverse gap-2 pt-5 sm:flex-row sm:items-center sm:justify-between">
+
+            <fieldset class="mt-6">
+              <legend class="mb-2 flex w-full flex-wrap items-center gap-1.5 text-[13px] font-medium text-ink-soft">
+                ประเภทธุรกิจ
+                <span class="text-danger" aria-hidden="true">*</span>
+                <span class="ml-auto flex items-center gap-1 text-[11.5px] font-normal text-muted">
+                  <InfoTip text="ใช้เป็นข้อมูลประกอบการวิเคราะห์ ไม่ได้ใช้ยืนยันตัวตนหรือยื่นภาษี" />
+                  ใช้เพื่อปรับคำแนะนำให้เหมาะกับขนาดธุรกิจของคุณ
+                </span>
+              </legend>
+              <div class="grid auto-rows-fr grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
+                <div
+                  v-for="type in topLevelBusinessTypes"
+                  :key="type.value"
+                  :class="
+                    cn(
+                      'group h-full min-h-[112px] cursor-pointer overflow-hidden rounded-2xl text-left transition-all',
+                      isGroupActive(type) ? 'bg-black text-white' : 'bg-neutral-200 text-ink hover:bg-neutral-300/70',
+                    )
+                  "
+                  @click="selectBusinessType(type.value)"
+                >
+                  <div class="flex h-full items-stretch">
+                    <span
+                      :class="
+                        cn(
+                          'flex w-24 shrink-0 items-center justify-center rounded-2xl transition-colors sm:w-28',
+                          isGroupActive(type) ? 'bg-white/10 text-white' : 'bg-white text-neutral-600',
+                        )
+                      "
+                      aria-hidden="true"
+                    >
+                      <component :is="type.icon" class="h-12 w-12 sm:h-14 sm:w-14" />
+                    </span>
+                    <div class="flex min-w-0 flex-1 flex-col justify-center px-4 py-3">
+                      <button
+                        type="button"
+                        class="flex w-full flex-col items-start gap-1 text-left"
+                        :aria-pressed="form.type === type.value"
+                      >
+                        <span class="flex w-full items-center gap-2">
+                          <span :class="cn('block text-[14.5px] font-semibold', isGroupActive(type) ? 'text-white' : 'text-ink')">{{ type.label }}</span>
+                          <Check v-if="form.type === type.value" class="ml-auto h-4 w-4 shrink-0 text-white" aria-hidden="true" />
+                        </span>
+                        <span :class="cn('block text-[12.5px] leading-snug line-clamp-2', isGroupActive(type) ? 'text-neutral-300' : 'text-muted')">{{ type.description }}</span>
+                      </button>
+                      <div
+                        v-if="type.children.length > 0"
+                        class="mt-2 flex flex-wrap items-center gap-2"
+                      >
+                        <span :class="cn('text-[10px] font-semibold uppercase tracking-wide', isGroupActive(type) ? 'text-neutral-400' : 'text-muted')">ในกลุ่มนี้</span>
+                        <button
+                          v-for="child in type.children"
+                          :key="child.value"
+                          type="button"
+                          :aria-pressed="form.type === child.value"
+                          :class="
+                            cn(
+                              'inline-flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-[11.5px] font-semibold transition',
+                              form.type === child.value
+                                ? 'bg-white text-ink'
+                                : isGroupActive(type)
+                                  ? 'bg-white/10 text-white hover:bg-white/20'
+                                  : 'bg-white text-ink hover:bg-neutral-200',
+                            )
+                          "
+                          @click.stop="selectBusinessType(child.value)"
+                        >
+                          <component :is="child.icon" class="h-3.5 w-3.5" aria-hidden="true" />
+                          {{ child.shortLabel }}
+                          <Check v-if="form.type === child.value" class="h-3.5 w-3.5" aria-hidden="true" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <p v-if="errors.type" class="mt-1.5 text-[12.5px] text-danger">{{ errors.type }}</p>
+            </fieldset>
+
+            <div class="mt-7 flex flex-col-reverse gap-2 pt-5 sm:flex-row sm:items-center sm:justify-end sm:gap-3">
               <button
                 type="button"
-                class="h-10 text-[13px] font-medium text-muted transition hover:text-brand-700"
+                class="h-10 rounded-full px-4 text-[13px] font-semibold text-ink-soft transition hover:bg-black/[0.04] hover:text-ink"
                 @click="skip"
               >
                 ข้ามไปก่อน
               </button>
               <AppButton type="submit" size="lg">
-                ต่อไป: เป้าหมาย
+                ต่อไป
                 <template #right>
                   <ArrowRight class="h-4 w-4" aria-hidden="true" />
                 </template>
@@ -306,44 +376,56 @@ async function signOut() {
           </form>
 
           <form v-else-if="current === 1" key="goals" @submit.prevent="next">
-            <p class="text-[11px] font-medium text-brand-700">ขั้นที่ 2 จาก 3</p>
-            <h1 class="mt-2 text-h2 font-semibold tracking-tight text-ink">อะไรสำคัญที่สุดสำหรับคุณ?</h1>
+            <h1 class="text-h2 font-semibold tracking-tight text-ink">อะไรสำคัญที่สุดสำหรับคุณ?</h1>
             <p class="mt-2 text-[13px] leading-relaxed text-muted">
               เลือกได้สูงสุด 3 เป้าหมาย เราจะใช้จัดลำดับข้อมูลและคำแนะนำในหน้าภาพรวม
             </p>
 
-            <div class="mt-6 grid grid-cols-1 gap-2.5 sm:grid-cols-2">
-              <button
-                v-for="goal in goalOptions"
-                :key="goal.value"
-                type="button"
-                :class="
-                  cn(
-                    'group flex items-start gap-3 rounded-2xl p-3.5 text-left transition-all',
-                    form.goals.includes(goal.value) ? 'bg-black text-white' : 'bg-neutral-100/80 text-ink hover:bg-neutral-200/70',
-                  )
-                "
-                :aria-pressed="form.goals.includes(goal.value)"
-                @click="toggleGoal(goal.value)"
-              >
-                <component
-                  :is="goal.icon"
-                  :class="cn('mt-0.5 h-4 w-4 shrink-0 transition-colors', form.goals.includes(goal.value) ? 'text-white' : 'text-neutral-500')"
-                  aria-hidden="true"
-                />
-                <span class="min-w-0 flex-1">
-                  <span :class="cn('block text-[13px] font-semibold', form.goals.includes(goal.value) ? 'text-white' : 'text-ink')">{{ goal.value }}</span>
-                  <span :class="cn('mt-0.5 block text-[11.5px] leading-relaxed', form.goals.includes(goal.value) ? 'text-neutral-300' : 'text-muted')">{{ goal.description }}</span>
-                </span>
-                <Check v-if="form.goals.includes(goal.value)" class="mt-0.5 h-4 w-4 shrink-0 text-white" aria-hidden="true" />
-              </button>
-            </div>
-            <div class="mt-2 flex items-center justify-between gap-3">
+            <div class="mt-2 flex items-center justify-end gap-3">
               <p v-if="errors.goals" class="text-[12.5px] text-danger">{{ errors.goals }}</p>
               <p v-else class="text-[11.5px] text-muted">เลือกแล้ว {{ form.goals.length }} จาก 3 เป้าหมาย</p>
             </div>
-
-            <div class="mt-7 flex items-center justify-between gap-3 pt-5">
+            <div class="mt-3 grid auto-rows-fr grid-cols-1 gap-2.5 sm:grid-cols-2">
+              <div
+                v-for="goal in goalOptions"
+                :key="goal.value"
+                :class="
+                  cn(
+                    'group h-full min-h-[112px] cursor-pointer overflow-hidden rounded-2xl text-left transition-all',
+                    form.goals.includes(goal.value) ? 'bg-black text-white' : 'bg-neutral-200 text-ink hover:bg-neutral-300/70',
+                  )
+                "
+                @click="toggleGoal(goal.value)"
+              >
+                <div class="flex h-full items-stretch">
+                  <span
+                    :class="
+                      cn(
+                        'flex w-24 shrink-0 items-center justify-center rounded-2xl transition-colors sm:w-28',
+                        form.goals.includes(goal.value) ? 'bg-white/10 text-white' : 'bg-white text-neutral-600',
+                      )
+                    "
+                    aria-hidden="true"
+                  >
+                    <component :is="goal.icon" class="h-12 w-12 sm:h-14 sm:w-14" />
+                  </span>
+                  <div class="flex min-w-0 flex-1 flex-col justify-center px-4 py-3">
+                    <button
+                      type="button"
+                      class="flex w-full flex-col items-start gap-1 text-left"
+                      :aria-pressed="form.goals.includes(goal.value)"
+                    >
+                      <span class="flex w-full items-center gap-2">
+                        <span :class="cn('block text-[14.5px] font-semibold', form.goals.includes(goal.value) ? 'text-white' : 'text-ink')">{{ goal.value }}</span>
+                        <Check v-if="form.goals.includes(goal.value)" class="ml-auto h-4 w-4 shrink-0 text-white" aria-hidden="true" />
+                      </span>
+                      <span :class="cn('block text-[12.5px] leading-snug line-clamp-2', form.goals.includes(goal.value) ? 'text-neutral-300' : 'text-muted')">{{ goal.description }}</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="mt-7 flex items-center justify-end gap-3 pt-5">
               <AppButton variant="ghost" size="lg" @click="back">
                 <template #left>
                   <ArrowLeft class="h-4 w-4" aria-hidden="true" />
@@ -351,7 +433,7 @@ async function signOut() {
                 ย้อนกลับ
               </AppButton>
               <AppButton type="submit" size="lg">
-                ต่อไป: ตรวจสอบ
+                ต่อไป
                 <template #right>
                   <ArrowRight class="h-4 w-4" aria-hidden="true" />
                 </template>
@@ -359,37 +441,40 @@ async function signOut() {
             </div>
           </form>
 
-          <div v-else key="review">
-            <div class="flex items-start gap-3">
-              <Sparkles class="mt-1 h-5 w-5 shrink-0 text-brand-400" aria-hidden="true" />
-              <div>
-                <p class="text-[11px] font-medium text-brand-700">ขั้นที่ 3 จาก 3</p>
-                <h1 class="mt-1 text-h2 font-semibold tracking-tight text-ink">ทุกอย่างพร้อมแล้ว</h1>
-              </div>
-            </div>
+          <div v-else-if="current === 2" key="import">
+            <ImportPage
+              embedded
+              @back="back"
+              @skip="skipImport"
+              @complete="completeImport"
+            />
+          </div>
+
+          <div v-else-if="current === 3" key="review">
+            <h1 class="text-h2 font-semibold tracking-tight text-ink">ทุกอย่างพร้อมแล้ว</h1>
             <p class="mt-3 text-[13px] leading-relaxed text-muted">
               ตรวจสอบข้อมูลอีกครั้ง แล้วเริ่มใช้งาน ROOKAR ได้เลย
             </p>
 
             <dl class="mt-6 overflow-hidden">
               <div class="flex items-start justify-between gap-4 bg-ink-50 px-4 py-3.5">
-                <dt class="text-[12px] text-muted">ชื่อธุรกิจ</dt>
+                <dt class="text-[12px] font-medium text-ink-soft">ชื่อธุรกิจ</dt>
                 <dd class="text-right text-[13px] font-medium text-ink">{{ form.name }}</dd>
               </div>
               <div class="flex items-start justify-between gap-4 px-4 py-3.5">
-                <dt class="text-[12px] text-muted">ประเภทธุรกิจ</dt>
+                <dt class="text-[12px] font-medium text-ink-soft">ประเภทธุรกิจ</dt>
                 <dd class="text-right text-[13px] font-medium text-ink">{{ selectedType?.label }}</dd>
               </div>
               <div class="flex items-start justify-between gap-4 bg-ink-50 px-4 py-3.5">
-                <dt class="text-[12px] text-muted">พนักงาน</dt>
+                <dt class="text-[12px] font-medium text-ink-soft">พนักงาน</dt>
                 <dd class="text-right text-[13px] font-medium text-ink">{{ employeeOptions.find((item) => item.value === form.employees)?.label ?? '—' }}</dd>
               </div>
               <div class="flex items-start justify-between gap-4 px-4 py-3.5">
-                <dt class="text-[12px] text-muted">รายได้ต่อปี</dt>
+                <dt class="text-[12px] font-medium text-ink-soft">รายได้ต่อปี</dt>
                 <dd class="text-right text-[13px] font-medium text-ink">{{ form.revenueRange || '—' }}</dd>
               </div>
               <div class="flex items-start justify-between gap-4 bg-ink-50 px-4 py-3.5">
-                <dt class="shrink-0 text-[12px] text-muted">เป้าหมาย</dt>
+                <dt class="shrink-0 text-[12px] font-medium text-ink-soft">เป้าหมาย</dt>
                 <dd class="flex flex-wrap justify-end gap-1.5">
                   <span v-for="goal in form.goals" :key="goal" class="rounded-full bg-black text-white font-semibold px-2.5 py-0.5 text-[11px]">
                     {{ goal }}
@@ -399,44 +484,41 @@ async function signOut() {
               </div>
             </dl>
 
-            <div class="mt-4 flex items-start gap-2.5 bg-canvas px-3.5 py-3">
+            <div v-if="!imported" class="mt-4 flex items-start gap-2.5">
               <Lightbulb class="mt-0.5 h-4 w-4 shrink-0 text-accent-600" aria-hidden="true" />
               <p class="text-[12px] leading-relaxed text-muted">
                 ยังไม่มีข้อมูลจริง? เริ่มด้วยไฟล์ยอดขายหรือต้นทุน 1 ไฟล์ก็พอ
                 ROOKAR จะค่อย ๆ เรียนรู้ธุรกิจคุณไปพร้อมกัน
               </p>
             </div>
+            <div v-else class="mt-4 flex items-start gap-2.5">
+              <Check class="mt-0.5 h-4 w-4 shrink-0 text-success" aria-hidden="true" />
+              <p class="text-[12px] leading-relaxed text-muted">
+                นำเข้าข้อมูลแล้ว ROOKAR จะใช้ข้อมูลนี้วิเคราะห์ภาพรวมและคำแนะนำให้คุณทันที
+              </p>
+            </div>
 
-            <div class="mt-6 flex flex-col-reverse gap-2 pt-5 sm:flex-row sm:items-center sm:justify-between">
+            <div class="mt-6 flex flex-col-reverse gap-2 pt-5 sm:flex-row sm:items-center sm:justify-end sm:gap-3">
               <AppButton variant="ghost" size="lg" :disabled="loading" @click="back">
                 <template #left>
                   <ArrowLeft class="h-4 w-4" aria-hidden="true" />
                 </template>
                 ย้อนกลับ
               </AppButton>
-              <div class="flex flex-col gap-2 sm:flex-row">
-                <AppButton variant="secondary" size="lg" :disabled="loading" @click="finish('import')">
-                  <template #left>
-                    <Loader2 v-if="loading" class="h-4 w-4 animate-spin" aria-hidden="true" />
-                  </template>
-                  นำเข้าข้อมูลก่อน
-                </AppButton>
-                <AppButton size="lg" :loading="loading" @click="finish('app')">
-                  เริ่มใช้งาน ROOKAR
-                  <template #right>
-                    <ArrowRight v-if="!loading" class="h-4 w-4" aria-hidden="true" />
-                  </template>
-                </AppButton>
-              </div>
+              <AppButton size="lg" :loading="loading" @click="finish">
+                เริ่มใช้งาน ROOKAR
+                <template #right>
+                  <ArrowRight v-if="!loading" class="h-4 w-4" aria-hidden="true" />
+                </template>
+              </AppButton>
             </div>
           </div>
         </Transition>
         </div>
       </section>
 
-      <p class="card-fade-static px-4 py-3 text-center text-[11px] text-muted">
+      <p class="rounded-2xl bg-white px-4 py-3 text-center text-[11px] text-muted">
         เปลี่ยนใจได้ทุกเมื่อ · ข้อมูลธุรกิจแก้ไขได้ภายหลัง
       </p>
-    </main>
   </div>
 </template>

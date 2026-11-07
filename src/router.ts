@@ -15,8 +15,11 @@ import AppShell from '@/components/layout/AppShell.vue'
 const LoginPage = lazyRouteComponent(() => import('@/pages/LoginPage.vue'))
 const SignUpPage = lazyRouteComponent(() => import('@/pages/SignUpPage.vue'))
 const ForgotPasswordPage = lazyRouteComponent(() => import('@/pages/ForgotPasswordPage.vue'))
+const ResetPasswordPage = lazyRouteComponent(() => import('@/pages/ResetPasswordPage.vue'))
 const BusinessSetupPage = lazyRouteComponent(() => import('@/pages/BusinessSetupPage.vue'))
 const DashboardPage = lazyRouteComponent(() => import('@/pages/DashboardPage.vue'))
+const IndustryPage = lazyRouteComponent(() => import('@/pages/IndustryPage.vue'))
+const SettingsPage = lazyRouteComponent(() => import('@/pages/SettingsPage.vue'))
 const DataSourcesPage = lazyRouteComponent(() => import('@/pages/DataSourcesPage.vue'))
 const ImportPage = lazyRouteComponent(() => import('@/pages/ImportPage.vue'))
 const AssistantPage = lazyRouteComponent(() => import('@/pages/AssistantPage.vue'))
@@ -82,10 +85,25 @@ const forgotRoute = createRoute({
   component: ForgotPasswordPage,
 })
 
-const setupRoute = createRoute({
+const resetPasswordRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/reset-password',
+  validateSearch: (search: Record<string, unknown>): { token?: string } => ({
+    token: typeof search.token === 'string' && search.token.trim() ? search.token.trim() : undefined,
+  }),
+  component: ResetPasswordPage,
+})
+
+const setupLayoutRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/setup',
   beforeLoad: requireSetupSession,
+  component: AppShell,
+})
+
+const setupRoute = createRoute({
+  getParentRoute: () => setupLayoutRoute,
+  path: '/',
   component: BusinessSetupPage,
 })
 
@@ -100,6 +118,18 @@ const dashboardRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: '/',
   component: DashboardPage,
+})
+
+const industryRoute = createRoute({
+  getParentRoute: () => appLayoutRoute,
+  path: '/industry',
+  component: IndustryPage,
+})
+
+const settingsRoute = createRoute({
+  getParentRoute: () => appLayoutRoute,
+  path: '/settings',
+  component: SettingsPage,
 })
 
 const dataSourcesRoute = createRoute({
@@ -146,9 +176,12 @@ const routeTree = rootRoute.addChildren([
   loginRoute,
   signupRoute,
   forgotRoute,
-  setupRoute,
+  resetPasswordRoute,
+  setupLayoutRoute.addChildren([setupRoute]),
   appLayoutRoute.addChildren([
     dashboardRoute,
+    industryRoute,
+    settingsRoute,
     dataSourcesRoute,
     dataDetailRoute,
     importRoute,

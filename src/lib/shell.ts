@@ -2,15 +2,37 @@ import { ref } from 'vue'
 
 const WIDTH_KEY = 'rookar.sidebar.width'
 const COLLAPSED_KEY = 'rookar.sidebar.collapsed'
-export const SIDEBAR_MIN_WIDTH = 220
-export const SIDEBAR_MAX_WIDTH = 400
-const DEFAULT_WIDTH = 248
+
+function viewportWidth() {
+  return typeof window === 'undefined' ? 0 : window.innerWidth
+}
+
+export function sidebarMinWidth() {
+  const width = viewportWidth()
+  if (width >= 1920) return 340
+  if (width >= 1440) return 300
+  return 220
+}
+
+export function sidebarMaxWidth() {
+  const width = viewportWidth()
+  if (width >= 1920) return 560
+  if (width >= 1440) return 480
+  return 400
+}
+
+function defaultWidth() {
+  const width = viewportWidth()
+  if (width >= 1920) return 400
+  if (width >= 1440) return 320
+  return 248
+}
 
 function readWidth() {
-  if (typeof window === 'undefined') return DEFAULT_WIDTH
+  if (typeof window === 'undefined') return defaultWidth()
   const stored = Number(window.localStorage.getItem(WIDTH_KEY))
-  if (!Number.isFinite(stored) || stored <= 0) return DEFAULT_WIDTH
-  return Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, stored))
+  if (!Number.isFinite(stored) || stored <= 0) return defaultWidth()
+  return Math.min(sidebarMaxWidth(), Math.max(sidebarMinWidth(), stored))
 }
 
 function readCollapsed() {
@@ -22,7 +44,7 @@ export const sidebarWidth = ref(readWidth())
 export const sidebarCollapsed = ref(readCollapsed())
 
 export function setSidebarWidth(value: number) {
-  sidebarWidth.value = Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, Math.round(value)))
+  sidebarWidth.value = Math.min(sidebarMaxWidth(), Math.max(sidebarMinWidth(), Math.round(value)))
 }
 
 export function persistSidebarWidth() {

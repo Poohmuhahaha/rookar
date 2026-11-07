@@ -7,48 +7,30 @@ type Tone = 'neutral' | 'brand' | 'success' | 'warning' | 'danger' | 'accent' | 
 const props = withDefaults(
   defineProps<{
     tone?: Tone
-    dot?: boolean
-    size?: 'sm' | 'md'
   }>(),
-  { tone: 'neutral', dot: false, size: 'sm' },
+  { tone: 'neutral' },
 )
 
 const tones: Record<Tone, string> = {
-  neutral: 'bg-neutral-800 text-white font-semibold',
-  brand: 'bg-black text-white font-semibold',
-  success: 'bg-neutral-900 text-white font-semibold',
-  warning: 'bg-amber-700 text-white font-semibold',
-  danger: 'bg-rose-700 text-white font-semibold',
-  accent: 'bg-orange-700 text-white font-semibold',
-  info: 'bg-blue-700 text-white font-semibold',
-}
-
-const dotTones: Record<Tone, string> = {
-  neutral: 'bg-neutral-300',
-  brand: 'bg-white',
-  success: 'bg-white',
-  warning: 'bg-amber-300',
-  danger: 'bg-rose-300',
-  accent: 'bg-orange-300',
-  info: 'bg-blue-300',
+  neutral: 'bg-neutral-800 text-white',
+  brand: 'bg-black text-white',
+  success: 'bg-neutral-900 text-white',
+  warning: 'bg-amber-700 text-white',
+  danger: 'bg-rose-700 text-white',
+  accent: 'bg-orange-700 text-white',
+  info: 'bg-blue-700 text-white',
 }
 
 const classes = computed(() =>
   cn(
-    'inline-flex items-center gap-1.5 rounded-full font-medium',
+    'inline-flex h-[22px] w-28 items-center justify-center rounded-full px-2.5 text-center text-[11px] font-semibold',
     tones[props.tone],
-    props.size === 'md' ? 'px-3 py-1 text-xs' : 'px-2.5 py-0.5 text-[11px]',
   ),
 )
 </script>
 
 <template>
   <span :class="classes">
-    <span
-      v-if="dot"
-      :class="cn('h-1.5 w-1.5 rounded-full', dotTones[tone])"
-      aria-hidden="true"
-    />
     <slot />
   </span>
 </template>

@@ -40,6 +40,8 @@ export interface DataSource {
   updatedAt: string
   period: string
   fileName: string
+  isDemo?: boolean
+  industryId?: string
 }
 
 export interface KpiPoint {
@@ -56,17 +58,26 @@ export interface CostSlice {
   color: string
 }
 
+export interface MacroIndicatorValue {
+  value: number
+  year: string
+}
+
+export type MacroIndicatorKey =
+  | 'gdpGrowth'
+  | 'householdConsumptionGrowth'
+  | 'cpiInflation'
+  | 'unemploymentRate'
+
 export interface SectorBenchmark {
-  sectorName: string
-  sectorGdpGrowth: number
-  privateConsumptionGrowth: number
-  inflationCpi: number
-  businessGrowth: number
-  outperformance: number
-  status: 'outperforming' | 'in_line' | 'underperforming'
-  assessment: string
-  period: string
+  countryName: string
+  periodLabel: string
+  indicators: Record<MacroIndicatorKey, MacroIndicatorValue>
   source: string
+  sourceUrl: string
+  lastUpdated: string
+  fetchedAt: string
+  stale?: boolean
 }
 
 export interface DashboardSummary {
@@ -91,7 +102,6 @@ export interface DashboardSummary {
     action: string
     prompt: string
   }
-  benchmark?: SectorBenchmark
   lastUpdated: string
 }
 
@@ -101,7 +111,15 @@ export interface ImportErrorRow {
   message: string
 }
 
+export interface ImportClassification {
+  type: DataType
+  confidence: number
+  reason: string
+}
+
 export interface ImportPreview {
+  previewId?: string
+  classification?: ImportClassification
   fileName: string
   fileSize: number
   totalRows: number
@@ -145,6 +163,7 @@ export interface Conversation {
   group: 'วันนี้' | 'เมื่อวาน' | 'ก่อนหน้านี้'
   thumbnail?: string
   avatars?: string[]
+  specialistRole?: SpecialistType
   messages: ChatMessage[]
 }
 

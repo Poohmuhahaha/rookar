@@ -1,0 +1,12 @@
+node_modules
+.wrangler
+.git
+.gitignore
+.env
+.env.*
+*.log
+tests
+playwright-report
+test-results
+
+data

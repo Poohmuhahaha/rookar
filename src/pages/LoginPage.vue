@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { reactive, ref } from 'vue'
 import { Link, useRouter } from '@tanstack/vue-router'
-import { AlertCircle, ArrowRight, Sparkles } from '@lucide/vue'
+import { AlertCircle, ArrowRight } from '@lucide/vue'
 import AuthLayout from '@/components/layout/AuthLayout.vue'
 import AppButton from '@/components/ui/AppButton.vue'
 import CheckboxField from '@/components/ui/CheckboxField.vue'
@@ -45,11 +45,6 @@ async function handleSubmit() {
   }
 }
 
-async function useDemoAccount() {
-  form.email = 'demo@rookar.co'
-  form.password = 'rookar1234'
-  await handleSubmit()
-}
 </script>
 
 <template>
@@ -62,25 +57,7 @@ async function useDemoAccount() {
         เข้าสู่ระบบเพื่อดูภาพรวมธุรกิจและคุยกับ AI ของคุณ
       </p>
 
-      <button
-        type="button"
-        class="mt-6 flex w-full items-center gap-3 rounded-lg bg-brand-50 px-3.5 py-3 text-left transition hover:bg-brand-100/70 focus-visible:bg-brand-100/70 focus-visible:outline-none"
-        :disabled="loading"
-        @click="useDemoAccount"
-      >
-        <Sparkles class="h-5 w-5 shrink-0 text-brand-400" aria-hidden="true" />
-        <span class="min-w-0 flex-1">
-          <span class="block text-[13px] font-medium text-brand-900">ลองด้วยบัญชีตัวอย่าง</span>
-          <span class="mt-0.5 block text-[11px] text-brand-700/80">
-            ข้อมูลร้านกาแฟพร้อมใช้งานทันที
-          </span>
-        </span>
-        <ArrowRight class="h-4 w-4 shrink-0 text-brand-400" aria-hidden="true" />
-      </button>
-
-      <p class="my-5 text-[11px] text-muted">หรือเข้าสู่ระบบด้วยอีเมล</p>
-
-      <form class="space-y-4" novalidate @submit.prevent="handleSubmit">
+      <form class="mt-7 space-y-4" novalidate @submit.prevent="handleSubmit">
         <TextField
           v-model="form.email"
           label="อีเมล"

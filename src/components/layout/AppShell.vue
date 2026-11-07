@@ -1,16 +1,17 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch, type Ref } from 'vue'
 import { Outlet, useRouter, useRouterState } from '@tanstack/vue-router'
-import { Menu, PanelLeftOpen } from '@lucide/vue'
+import { ChevronLeft, ChevronRight, Menu } from '@lucide/vue'
 import AppSidebar from './AppSidebar.vue'
 import AppSheet from '@/components/ui/AppSheet.vue'
 import { getSession } from '@/lib/mockApi'
+import { hydrateAgents } from '@/lib/agentVault'
 import {
-  SIDEBAR_MAX_WIDTH,
-  SIDEBAR_MIN_WIDTH,
   persistSidebarWidth,
   setSidebarWidth,
   sidebarCollapsed,
+  sidebarMaxWidth,
+  sidebarMinWidth,
   sidebarWidth,
   toggleSidebar,
 } from '@/lib/shell'
@@ -60,13 +61,22 @@ function handleKeyDown(event: KeyboardEvent) {
   }
 }
 
+function ensureSidebarWidth() {
+  const min = sidebarMinWidth()
+  if (sidebarWidth.value < min) setSidebarWidth(min)
+}
+
 onMounted(() => {
+  ensureSidebarWidth()
+  if (session) void hydrateAgents()
   window.addEventListener('keydown', handleKeyDown)
+  window.addEventListener('resize', ensureSidebarWidth)
 })
 
 onUnmounted(() => {
   stopResize?.()
   window.removeEventListener('keydown', handleKeyDown)
+  window.removeEventListener('resize', ensureSidebarWidth)
 })
 
 watch(pathname, () => {
@@ -83,58 +93,71 @@ watch(pathname, () => {
       ข้ามไปยังเนื้อหา
     </a>
 
-    <div class="flex h-full w-full overflow-hidden bg-white">
+    <div class="relative flex h-full w-full overflow-hidden bg-white lg:gap-12">
       <!-- Unified Consistent Sidebar across all routes (Silky Smooth Negative-Margin Slide) -->
       <aside
         :class="[
-          'relative hidden h-full shrink-0 bg-white border-r border-black/[0.06] lg:block',
-          !isResizing ? 'transition-[margin] duration-300 ease-in-out will-change-[margin-left]' : '',
+          'group/aside relative hidden h-full shrink-0 overflow-hidden bg-white lg:block',
+          !isResizing
+            ? sidebarCollapsed
+              ? 'transition-[width] duration-300 ease-in-out will-change-[width]'
+              : 'transition-[width] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[width]'
+            : '',
         ]"
         :style="{
-          width: `${sidebarWidth}px`,
-          marginLeft: sidebarCollapsed ? `-${sidebarWidth}px` : '0px',
+          width: sidebarCollapsed ? '72px' : `${sidebarWidth}px`,
         }"
       >
         <AppSidebar />
         <div
-          class="absolute inset-y-0 -right-1 z-10 hidden w-2 cursor-col-resize touch-none lg:block"
+          v-if="!sidebarCollapsed"
+          class="group/resize absolute inset-y-0 -right-2 z-20 hidden w-4 cursor-col-resize touch-none items-center justify-center lg:flex"
           role="separator"
           aria-orientation="vertical"
           aria-label="ปรับความกว้างเมนู"
-          :aria-valuemin="SIDEBAR_MIN_WIDTH"
-          :aria-valuemax="SIDEBAR_MAX_WIDTH"
+          title="ลากเพื่อปรับความกว้าง Sidebar"
+          :aria-valuemin="sidebarMinWidth()"
+          :aria-valuemax="sidebarMaxWidth()"
           :aria-valuenow="sidebarWidth"
           tabindex="0"
           @pointerdown="startSidebarResize"
           @keydown.left.prevent="nudgeSidebar(-16)"
           @keydown.right.prevent="nudgeSidebar(16)"
-        ></div>
+        >
+          <span
+            class="h-14 w-1 rounded-full bg-neutral-300/70 opacity-50 transition-all duration-200 group-hover/aside:opacity-100 group-hover/resize:bg-neutral-400 group-hover/resize:opacity-100"
+            aria-hidden="true"
+          />
+        </div>
       </aside>
+
+      <button
+        type="button"
+        :class="[
+          'absolute top-4 z-[60] hidden h-16 w-8 -translate-x-px cursor-pointer items-center justify-center rounded-r-2xl border border-black/10! bg-white text-neutral-400 shadow-md lg:flex',
+          !isResizing
+            ? sidebarCollapsed
+              ? 'transition-[left] duration-300 ease-in-out'
+              : 'transition-[left] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]'
+            : '',
+        ]"
+        :style="{ left: sidebarCollapsed ? '72px' : `${sidebarWidth}px` }"
+        :aria-label="sidebarCollapsed ? 'ขยายแถบเมนู (Ctrl+\)' : 'ย่อแถบเมนู (Ctrl+\)'"
+        :title="sidebarCollapsed ? 'ขยายแถบเมนู (Ctrl+\)' : 'ย่อแถบเมนู (Ctrl+\)'"
+        @click="toggleSidebar"
+      >
+        <ChevronRight v-if="sidebarCollapsed" class="h-4 w-4 transition-transform duration-300 ease-out" aria-hidden="true" />
+        <ChevronLeft v-else class="h-4 w-4 transition-transform duration-300 ease-out" aria-hidden="true" />
+      </button>
 
       <!-- Main Content Area -->
       <main
         id="main-content"
         :class="[
           'relative min-w-0 flex-1 overflow-hidden h-full',
-          isAssistant ? '' : 'overflow-y-auto bg-white p-4 sm:p-6 lg:p-8',
+          isAssistant ? '' : 'overflow-y-auto bg-white p-4 sm:p-6 lg:px-8 lg:py-5',
         ]"
       >
-        <!-- Desktop Sidebar Expand Toggle (When collapsed, smoothly fades in) -->
-        <button
-          type="button"
-          :class="[
-            'fixed left-3.5 top-3.5 z-30 hidden h-9 w-9 items-center justify-center rounded-xl bg-white border border-black/10 text-muted shadow-xs transition-all duration-300 hover:bg-neutral-50 hover:text-ink lg:inline-flex',
-            sidebarCollapsed
-              ? 'opacity-100 pointer-events-auto scale-100 delay-150'
-              : 'opacity-0 pointer-events-none scale-90 delay-0',
-          ]"
-          aria-label="ขยายแถบเมนู (Ctrl+\)"
-          title="ขยายแถบเมนู (Ctrl+\)"
-          @click="toggleSidebar"
-        >
-          <PanelLeftOpen class="h-4 w-4" aria-hidden="true" />
-        </button>
-
         <Outlet />
       </main>
     </div>

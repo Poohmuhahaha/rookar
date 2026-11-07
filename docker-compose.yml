@@ -1,0 +1,61 @@
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    container_name: rookar-web
+    restart: unless-stopped
+    ports:
+      - "${PORT:-8090}:80"
+    networks:
+      - web-network
+    depends_on:
+      api:
+        condition: service_healthy
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: rookar-api
+    restart: unless-stopped
+    environment:
+      PORT: 8787
+      DATABASE_URL: /app/data/rookar-docker.sqlite
+      NODE_ENV: development
+      APP_URL: ${APP_URL:-http://localhost:8090}
+      AI_PROVIDER: ${AI_PROVIDER:-mock}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4.1-mini}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      MAIL_FROM: ${MAIL_FROM:-ROOKAR <no-reply@rookar.co>}
+    volumes:
+      - ./data:/app/data
+    networks:
+      - web-network
+    healthcheck:
+      test: ["CMD", "bun", "-e", "fetch('http://127.0.0.1:8787/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+
+  # Optional Cloudflare Tunnel: docker compose --profile tunnel up -d
+  tunnel:
+    image: cloudflare/cloudflared:latest
+    container_name: rookar-tunnel
+    restart: unless-stopped
+    command: tunnel run
+    environment:
+      - TUNNEL_TOKEN=${TUNNEL_TOKEN}
+    networks:
+      - web-network
+    depends_on:
+      - web
+    profiles:
+      - tunnel
+
+networks:
+  web-network:
+    driver: bridge

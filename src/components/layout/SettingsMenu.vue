@@ -40,6 +40,7 @@ import {
 import AppButton from '@/components/ui/AppButton.vue'
 import AppModal from '@/components/ui/AppModal.vue'
 import { getSession, logout } from '@/lib/mockApi'
+import { profileAvatar, setProfileAvatar } from '@/lib/profile'
 import { useToast } from '@/lib/toast'
 
 const props = withDefaults(defineProps<{ variant?: 'default' | 'assistant' }>(), {
@@ -57,7 +58,6 @@ const initials = computed(() => session?.user.initials ?? 'RK')
 const open = ref(false)
 
 // Dynamic user avatar (supports real local file upload)
-const userAvatar = ref(session?.user.avatarUrl ?? '/avatar.jpg')
 const avatarInput = ref<HTMLInputElement | null>(null)
 
 function triggerAvatarPicker() {
@@ -76,11 +76,7 @@ function handleAvatarUpload(event: Event) {
   const reader = new FileReader()
   reader.onload = (e) => {
     const dataUrl = e.target?.result as string
-    userAvatar.value = dataUrl
-    if (session) {
-      session.user.avatarUrl = dataUrl
-      localStorage.setItem('rookar_session', JSON.stringify(session))
-    }
+    setProfileAvatar(dataUrl)
     toast.success('อัปเดตรูปโปรไฟล์สำเร็จ', 'บันทึกรูปโปรไฟล์ใหม่ของคุณเรียบร้อยแล้ว')
   }
   reader.readAsDataURL(file)
@@ -214,7 +210,7 @@ async function signOut() {
           <span class="flex items-center gap-2.5">
             <span class="relative flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-neutral-200">
               <img
-                :src="userAvatar"
+                :src="profileAvatar"
                 :alt="session?.user.name ?? 'Profile'"
                 class="h-full w-full object-cover"
               />
@@ -234,7 +230,7 @@ async function signOut() {
             </span>
           </span>
           <span
-            class="flex h-9 items-center justify-center gap-1.5 rounded-full bg-neutral-900 px-3 text-[11.5px] font-semibold text-white transition hover:bg-black"
+            class="settings-plan-btn flex h-9 items-center justify-center gap-1.5 rounded-full bg-neutral-900 px-3 text-[11.5px] font-semibold text-white transition hover:bg-black"
             @click.stop="openModal('upgrade')"
           >
             <Sparkles class="h-3.5 w-3.5 text-white" aria-hidden="true" />
@@ -249,7 +245,7 @@ async function signOut() {
         aria-label="เปิดเมนูตั้งค่า"
       >
         <span class="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-neutral-200">
-          <img :src="userAvatar" :alt="session?.user.name ?? 'Profile'" class="h-full w-full object-cover" />
+          <img :src="profileAvatar" :alt="session?.user.name ?? 'Profile'" class="h-full w-full object-cover" />
         </span>
         <span class="min-w-0 flex-1">
           <span class="block truncate text-[12px] font-medium text-ink">{{ session?.user.name ?? 'ผู้ใช้งาน' }}</span>
@@ -265,7 +261,7 @@ async function signOut() {
         align="start"
         :side-offset="8"
         :collision-padding="12"
-        class="popover-zoom-in no-scrollbar z-[70] max-h-[min(82vh,620px)] w-[min(320px,calc(100vw-24px))] overflow-y-auto rounded-[32px] bg-white p-3 shadow-[0_12px_36px_rgba(0,0,0,0.08)] ring-1 ring-black/[0.06] focus:outline-none"
+        class="settings-popover popover-zoom-in no-scrollbar z-[70] max-h-[min(82vh,620px)] w-[min(320px,calc(100vw-24px))] overflow-y-auto rounded-[32px] bg-white p-3 shadow-[0_12px_36px_rgba(0,0,0,0.08)] ring-1 ring-black/[0.06] focus:outline-none"
         aria-label="เมนูตั้งค่า"
       >
         <!-- 1. บัญชี -->

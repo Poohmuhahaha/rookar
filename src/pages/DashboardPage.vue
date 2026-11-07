@@ -11,9 +11,10 @@ import KpiCard from '@/components/charts/KpiCard.vue'
 import RevenueChart from '@/components/charts/RevenueChart.vue'
 import CostDonut from '@/components/charts/CostDonut.vue'
 import ScenarioBuilderModal from '@/components/features/ScenarioBuilderModal.vue'
-import MarketBenchmarkCard from '@/components/features/MarketBenchmarkCard.vue'
 import { getDashboard, getSession, listSources, seedSampleSources } from '@/lib/mockApi'
-import { formatCurrency, formatDateThai, formatDelta, formatNumber, formatPercent, timeAgo } from '@/lib/format'
+import { getIndustryProfile } from '@/lib/industries'
+import { industryFocus } from '@/lib/industryFocus'
+import { formatCurrency, formatDelta, formatNumber, formatPercent, timeAgo } from '@/lib/format'
 import { useToast } from '@/lib/toast'
 
 type Range = '3m' | '6m' | '12m'
@@ -23,6 +24,7 @@ const toast = useToast()
 const queryClient = useQueryClient()
 const session = getSession()
 const range = ref<Range>('6m')
+const selectedIndustry = industryFocus
 const seedLoading = ref(false)
 const showScenarioModal = ref(false)
 
@@ -32,9 +34,11 @@ const rangeOptions: { value: Range; label: string }[] = [
   { value: '12m', label: '12 เดือน' },
 ]
 
+const selectedIndustryProfile = computed(() => getIndustryProfile(selectedIndustry.value))
+
 const { data, isPending, isFetching } = useQuery({
-  queryKey: computed(() => ['dashboard', range.value] as const),
-  queryFn: () => getDashboard(range.value),
+  queryKey: computed(() => ['dashboard', range.value, selectedIndustry.value] as const),
+  queryFn: () => getDashboard(range.value, selectedIndustry.value),
   placeholderData: (previous) => previous,
 })
 
@@ -44,9 +48,16 @@ const { data: sources } = useQuery({
 })
 
 const businessName = computed(() => session?.business?.name ?? 'ธุรกิจของคุณ')
-const today = formatDateThai(new Date())
 const totalRows = computed(() => (sources.value ?? []).reduce((sum, source) => sum + source.rowCount, 0))
-
+const topCost = computed(() => {
+  const slices = data.value?.costBreakdown ?? []
+  return slices.length ? slices.reduce((top, slice) => (slice.share > top.share ? slice : top)) : null
+})
+const costToRevenue = computed(() => {
+  const summary = data.value
+  if (!summary || summary.revenue === 0) return 0
+  return Number(((summary.cost / summary.revenue) * 100).toFixed(1))
+})
 const qualityMeta = {
   complete: { label: 'ครบถ้วน', tone: 'success' as const },
   partial: { label: 'ควรตรวจสอบ', tone: 'warning' as const },
@@ -65,7 +76,7 @@ async function loadSample() {
   if (seedLoading.value) return
   seedLoading.value = true
   try {
-    await seedSampleSources()
+    await seedSampleSources(selectedIndustry.value)
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ['dashboard'] }),
       queryClient.invalidateQueries({ queryKey: ['sources'] }),
@@ -78,7 +89,7 @@ async function loadSample() {
 </script>
 
 <template>
-  <PageHeader title="ภาพรวมธุรกิจ" :description="`${businessName} · ข้อมูล ณ ${today}`">
+  <PageHeader :title="`ภาพรวมธุรกิจของ ${businessName}`">
     <template #actions>
       <AppButton variant="secondary" @click="router.navigate({ to: '/app/import' })">
         <template #left>
@@ -96,10 +107,10 @@ async function loadSample() {
   </PageHeader>
 
   <div v-if="isPending" aria-label="กำลังโหลดข้อมูล">
-    <div class="grid grid-cols-2 gap-3 xl:grid-cols-4">
+    <div class="grid grid-cols-2 gap-5 xl:grid-cols-4">
       <div v-for="index in 4" :key="index" class="skeleton h-[142px] rounded-[24px]" />
     </div>
-    <div class="mt-3 grid gap-3 xl:grid-cols-[1.65fr_1fr]">
+    <div class="mt-5 grid gap-5 xl:grid-cols-[1.65fr_1fr]">
       <div class="skeleton h-[386px] rounded-[24px]" />
       <div class="skeleton h-[386px] rounded-[24px]" />
     </div>
@@ -123,12 +134,14 @@ async function loadSample() {
           ลองใช้ข้อมูลตัวอย่าง
         </AppButton>
       </div>
-      <p class="mt-4 text-[11px] text-faint">ข้อมูลตัวอย่างเป็นร้านกาแฟจำลอง ไม่กระทบข้อมูลจริงของคุณ</p>
+      <p class="mt-4 text-[11px] text-faint">
+        ข้อมูลตัวอย่างจะถูกสร้างตามอุตสาหกรรมที่เลือก ({{ selectedIndustryProfile.shortLabel }}) และไม่กระทบข้อมูลจริงของคุณ
+      </p>
     </div>
   </section>
 
   <template v-else>
-    <div class="grid grid-cols-2 gap-3 xl:grid-cols-4">
+    <div class="grid grid-cols-2 gap-5 xl:grid-cols-4">
       <KpiCard
         label="รายได้รวม"
         :value="formatCurrency(data.revenue)"
@@ -168,7 +181,7 @@ async function loadSample() {
       />
     </div>
 
-    <div class="mt-3 grid gap-3 xl:grid-cols-[1.65fr_1fr]">
+    <div class="mt-5 grid gap-5 xl:grid-cols-[1.65fr_1fr]">
       <article class="card-fade-static p-4 sm:p-5">
         <div class="relative z-10">
           <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -218,30 +231,19 @@ async function loadSample() {
         </div>
       </article>
 
-      <article class="card-fade-static p-4 sm:p-5">
-        <div class="relative z-10">
-          <div class="flex items-start justify-between gap-2">
-            <div>
+      <article class="card-fade-static h-full p-4 sm:p-5">
+        <div class="relative z-10 flex h-full flex-col">
+          <div class="flex items-start justify-between gap-3">
+            <div class="min-w-0">
               <h2 class="flex items-center gap-1 text-[15px] font-semibold text-ink">
                 โครงสร้างต้นทุน
                 <InfoTip text="สัดส่วนต้นทุนแต่ละหมวดจากต้นทุนรวมในช่วงเวลาที่เลือก" />
               </h2>
               <p class="mt-0.5 text-[12px] text-muted">สัดส่วนของต้นทุนรวม</p>
             </div>
-          </div>
-
-          <div class="mt-5">
-            <CostDonut :slices="data.costBreakdown" :total="data.cost" />
-          </div>
-
-          <div class="mt-5 flex items-center justify-between rounded-2xl bg-white px-3.5 py-3">
-            <div>
-              <p class="text-[11.5px] text-muted">ต้นทุนรวม</p>
-              <p class="tabular mt-0.5 text-sm font-semibold text-ink">{{ formatCurrency(data.cost) }}</p>
-            </div>
             <span
               :class="[
-                'rounded-full px-2.5 py-0.5 text-[11px] font-semibold text-white',
+                'mt-0.5 shrink-0 rounded-full px-2.5 py-0.5 text-[10.5px] font-semibold text-white',
                 data.costDelta > 0 ? 'bg-rose-700' : 'bg-neutral-900',
               ]"
             >
@@ -249,22 +251,40 @@ async function loadSample() {
             </span>
           </div>
 
-          <p class="mt-3 text-[11.5px] leading-relaxed text-muted">
-            วัตถุดิบยังเป็นต้นทุนก้อนใหญ่ที่สุด คิดเป็น {{ data.costBreakdown[0]?.share ?? 0 }}% ของต้นทุนรวม
-          </p>
+          <div class="mt-4 flex flex-1 items-center">
+            <CostDonut :slices="data.costBreakdown" :total="data.cost" />
+          </div>
+
+          <div class="mt-4 rounded-2xl bg-white px-4 py-3.5">
+            <div class="flex items-end justify-between gap-3">
+              <div class="min-w-0">
+                <p class="text-[11px] text-muted">ต้นทุนรวม</p>
+                <p class="tabular mt-0.5 text-[17px] font-semibold leading-none text-ink">{{ formatCurrency(data.cost) }}</p>
+              </div>
+              <div class="shrink-0 text-right">
+                <p class="text-[11px] text-muted">ต้นทุนต่อรายได้</p>
+                <p class="tabular mt-0.5 text-[13px] font-semibold leading-none text-ink">{{ formatPercent(costToRevenue) }}</p>
+              </div>
+            </div>
+            <div class="mt-2.5 h-1.5 overflow-hidden rounded-full bg-black/[0.06]" aria-hidden="true">
+              <div
+                class="h-full rounded-full bg-ink transition-[width] duration-700"
+                :style="{ width: `${Math.min(costToRevenue, 100)}%` }"
+              />
+            </div>
+            <p class="mt-2 text-[11px] leading-relaxed text-muted">
+              <span class="font-medium text-ink-soft">{{ topCost?.label ?? 'หมวดหลัก' }}</span>
+              เป็นต้นทุนก้อนใหญ่สุดที่ {{ topCost?.share ?? 0 }}% ·
+              ต้นทุนรวม{{ data.costDelta > 0 ? 'เพิ่มขึ้น' : data.costDelta < 0 ? 'ลดลง' : 'ทรงตัว' }}
+              <span v-if="data.costDelta !== 0" class="font-medium text-ink-soft">{{ formatDelta(Math.abs(data.costDelta)) }}</span>
+              จากช่วงก่อน
+            </p>
+          </div>
         </div>
       </article>
     </div>
 
-    <!-- Macroeconomic & Sector GDP Benchmark -->
-    <div class="mt-3">
-      <MarketBenchmarkCard
-        :benchmark="data.benchmark"
-        @open-scenario="showScenarioModal = true"
-      />
-    </div>
-
-    <div class="mt-4 grid gap-3.5 xl:grid-cols-[1.35fr_1fr]">
+    <div class="mt-5 grid gap-5 xl:grid-cols-[1.35fr_1fr]">
       <article class="card-fade-static p-6 sm:p-7">
         <div class="relative z-10 flex w-full flex-col justify-between h-full">
           <div>
@@ -339,7 +359,9 @@ async function loadSample() {
                     {{ formatNumber(source.rowCount) }} แถว · {{ timeAgo(source.updatedAt) }}
                   </span>
                 </span>
-                <AppBadge :tone="qualityMeta[source.quality].tone" dot>
+                <AppBadge
+                  :tone="qualityMeta[source.quality].tone"
+                >
                   {{ qualityMeta[source.quality].label }}
                 </AppBadge>
               </button>
@@ -358,8 +380,8 @@ async function loadSample() {
       </article>
     </div>
 
-    <p class="card-fade-static px-4 py-3 text-center text-[11px] leading-relaxed text-faint">
-      ROOKAR วิเคราะห์จากข้อมูลที่คุณนำเข้าเท่านั้น · ตัวเลขสรุปอาจแตกต่างจากการปิดบัญชีจริงเล็กน้อย
+    <p class="mt-5 rounded-[24px] bg-black px-4 py-3 text-center text-[11px] leading-relaxed text-white">
+      ROOKAR วิเคราะห์จากข้อมูลที่คุณนำเข้า · ข้อมูลธุรกิจอาจเป็นข้อมูลตัวอย่างตามอุตสาหกรรม · ตัวเลขสรุปอาจแตกต่างจากการปิดบัญชีจริง
     </p>
 
     <!-- Interactive What-If Scenario Builder Modal -->

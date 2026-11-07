@@ -5,12 +5,14 @@ import { AlertCircle, ArrowLeft, CheckCircle2, Mail } from '@lucide/vue'
 import AuthLayout from '@/components/layout/AuthLayout.vue'
 import AppButton from '@/components/ui/AppButton.vue'
 import TextField from '@/components/ui/TextField.vue'
+import { requestPasswordReset } from '@/lib/mockApi'
 
 const form = reactive({ email: '' })
 const errors = reactive<{ email?: string }>({})
 const loading = ref(false)
 const sent = ref(false)
 const sentEmail = ref('')
+const devResetUrl = ref<string | null>(null)
 
 async function handleSubmit() {
   errors.email = undefined
@@ -23,10 +25,21 @@ async function handleSubmit() {
     return
   }
   loading.value = true
-  await new Promise((resolve) => setTimeout(resolve, 700))
-  sentEmail.value = form.email.trim()
-  sent.value = true
-  loading.value = false
+  try {
+    const result = await requestPasswordReset(form.email.trim())
+    sentEmail.value = form.email.trim()
+    devResetUrl.value = result.devResetUrl ?? null
+    sent.value = true
+  } catch (error) {
+    errors.email = error instanceof Error ? error.message : 'ส่งลิงก์ไม่สำเร็จ กรุณาลองใหม่'
+  } finally {
+    loading.value = false
+  }
+}
+
+function retry() {
+  sent.value = false
+  devResetUrl.value = null
 }
 </script>
 
@@ -78,7 +91,13 @@ async function handleSubmit() {
         <AlertCircle class="mt-0.5 h-3.5 w-3.5 shrink-0 text-accent-600" aria-hidden="true" />
         ไม่พบอีเมล? ลองตรวจโฟลเดอร์สแปม หรือส่งอีกครั้งด้วยอีเมลอื่น
       </div>
-      <AppButton variant="secondary" block class="mt-5" @click="sent = false">
+      <div v-if="devResetUrl" class="mt-3 bg-brand-50 px-3.5 py-3 text-left text-xs leading-relaxed text-brand-800">
+        <p class="font-semibold">โหมดทดสอบ: ยังไม่ได้ตั้งค่าอีเมล</p>
+        <a :href="devResetUrl" class="mt-1 inline-block font-semibold underline underline-offset-4">
+          เปิดลิงก์ตั้งรหัสผ่านใหม่
+        </a>
+      </div>
+      <AppButton variant="secondary" block class="mt-5" @click="retry">
         ส่งอีกครั้ง
       </AppButton>
       <Link

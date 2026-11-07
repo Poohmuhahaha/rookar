@@ -54,23 +54,23 @@ const trendIcon = computed(() => {
   <article class="card-fade group flex h-full flex-col justify-between p-4 sm:p-5">
     <div class="relative z-10">
       <!-- Header row: Label + Trend Pill -->
-      <div class="flex items-center justify-between gap-2">
+      <div class="kpi-header flex items-center justify-between gap-2">
         <h3 class="flex items-center gap-1 text-[12.5px] font-medium text-ink-soft">
           {{ label }}
           <InfoTip v-if="info" :text="info" />
         </h3>
-        <span :class="cn('inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-[11px] font-semibold tracking-tight', toneClass)">
+        <span :class="cn('kpi-trend inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-[11px] font-semibold tracking-tight', toneClass)">
           <component :is="trendIcon" class="h-3 w-3" aria-hidden="true" />
           {{ change }}
         </span>
       </div>
 
       <!-- Value row: Metric + Subtitle with smooth CountUp Animation -->
-      <div class="mt-2.5 flex items-baseline justify-between gap-2">
+      <div class="kpi-value-row mt-2.5 flex items-baseline justify-between gap-2">
         <p class="tabular text-[25px] font-bold leading-tight tracking-[-0.03em] text-ink sm:text-[27px]">
           {{ displayValue }}
         </p>
-        <p class="truncate text-[11px] font-medium text-muted">{{ note }}</p>
+        <p class="kpi-note truncate text-[11px] font-medium text-muted">{{ note }}</p>
       </div>
     </div>
 

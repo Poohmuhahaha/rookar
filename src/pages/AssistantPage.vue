@@ -1,12 +1,16 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRouter, useSearch } from '@tanstack/vue-router'
 import { useQuery, useQueryClient } from '@tanstack/vue-query'
 import {
   ArrowUp,
+  Check,
   CircleStop,
   Database,
   FileSpreadsheet,
+  History,
+  Info,
+  MessageSquare,
   Mic,
   PanelRightOpen,
   Paperclip,
@@ -23,24 +27,26 @@ import {
   Plus,
   Lightbulb,
 } from '@lucide/vue'
+import AppModal from '@/components/ui/AppModal.vue'
 import AppSheet from '@/components/ui/AppSheet.vue'
 import ChatBubble from '@/components/features/ChatBubble.vue'
 import ChatHistory from '@/components/features/ChatHistory.vue'
 import WelcomeMark from '@/components/brand/WelcomeMark.vue'
-import PastelIcon from '@/components/brand/PastelIcon.vue'
 import AgentVaultModal from '@/components/features/AgentVaultModal.vue'
 import { agentsList, isAgentAllowedInChat } from '@/lib/agentVault'
+import { getIndustryProfile } from '@/lib/industries'
+import { industryFocus } from '@/lib/industryFocus'
 import { createConversation, createMessage, getConversations, getSession, listSources, saveConversations, streamAiReply } from '@/lib/mockApi'
-import { formatNumber } from '@/lib/format'
-import { sidebarCollapsed } from '@/lib/shell'
+import { formatNumber, timeAgo } from '@/lib/format'
 import { useToast } from '@/lib/toast'
-import type { ChatMessage, Conversation } from '@/types'
+import type { ChatMessage, Conversation, SpecialistType } from '@/types'
 
 const router = useRouter()
 const routeSearch = useSearch({ from: '/app/assistant' })
 const queryClient = useQueryClient()
 const toast = useToast()
 const session = getSession()
+const industryProfile = getIndustryProfile(industryFocus.value)
 
 const { data: conversationData, isPending: historyPending } = useQuery({
   queryKey: ['conversations'],
@@ -61,6 +67,7 @@ const fileInput = ref<HTMLInputElement | null>(null)
 const isStreaming = ref(false)
 const isListening = ref(false)
 const stopRequested = ref(false)
+let streamController: AbortController | null = null
 const contextOpen = ref(false)
 const historyOpen = ref(false)
 const showAgentVault = ref(false)
@@ -81,6 +88,21 @@ const activeBoardroomAgents = computed(() => {
   return agentsList.value.filter((agent) => isAgentAllowedInChat(agent, activeId.value))
 })
 const historyCollapsed = ref(localStorage.getItem('rookar.assistant.history-collapsed') === '1')
+const historyPanelWidth = ref(332)
+
+function updateHistoryPanelWidth() {
+  if (typeof window === 'undefined') return
+  historyPanelWidth.value = window.innerWidth >= 1920 ? 520 : window.innerWidth >= 1440 ? 420 : 332
+}
+
+onMounted(() => {
+  updateHistoryPanelWidth()
+  window.addEventListener('resize', updateHistoryPanelWidth)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('resize', updateHistoryPanelWidth)
+})
 const initialized = ref(false)
 const messageList = ref<HTMLElement | null>(null)
 const composerEl = ref<HTMLTextAreaElement | null>(null)
@@ -91,140 +113,79 @@ const totalRows = computed(() => (sources.value ?? []).reduce((sum, source) => s
 
 type SpecialistRole = 'all' | 'finance' | 'market' | 'strategy' | 'planning'
 
-const activeSpecialist = ref<SpecialistRole>('all')
+const activeSpecialist = ref<SpecialistRole | null>(null)
+const roleModalOpen = ref(false)
+const chatPickerOpen = ref(false)
+let ignoreNextChatReset = false
 
 const specialistRoles = [
   { id: 'all' as const, label: 'ภาพรวม (All)', icon: Sparkles, desc: 'มองภาพรวมธุรกิจและเชื่อมโยงทุกมิติ' },
-  { id: 'finance' as const, label: 'การเงิน & ต้นทุน', icon: Wallet, desc: 'เจาะลึกต้นทุนวัตถุดิบ ค่าแรง และสภาพคล่อง' },
-  { id: 'market' as const, label: 'ตลาด & GDP', icon: TrendingUp, desc: 'วิเคราะห์เทียบ GDP สศช. และกำลังซื้อ ธปท.' },
+  { id: 'finance' as const, label: 'การเงิน & ต้นทุน', icon: Wallet, desc: 'เจาะลึกต้นทุนหลัก ค่าแรง และสภาพคล่อง' },
+  { id: 'market' as const, label: 'ตลาด & GDP', icon: TrendingUp, desc: 'วิเคราะห์ GDP เงินเฟ้อ และกำลังซื้อ' },
   { id: 'strategy' as const, label: 'กลยุทธ์ & ราคา', icon: Target, desc: 'ตั้งราคา แข่งขันในตลาด และรักษา Margin' },
   { id: 'planning' as const, label: 'แผนธุรกิจ (Planning)', icon: Rocket, desc: 'จัดทำ Action Plan ปฏิบัติการ 30 วัน' },
 ]
 
-const suggestionsByRole: Record<SpecialistRole, { type: 'star' | 'pencil' | 'palette'; title: string; description: string; prompt: string }[]> = {
-  all: [
-    {
-      type: 'star',
-      title: 'เปรียบเทียบตลาด & GDP',
-      description: 'เทียบการเติบโตร้านกับ GDP ภาคบริการ (+3.8%) และเงินเฟ้อ',
-      prompt: 'วิเคราะห์ยอดขายร้านเทียบกับ GDP ประเทศและสภาวะตลาดให้หน่อย',
-    },
-    {
-      type: 'pencil',
-      title: 'กลยุทธ์ราคาในภาวะเงินเฟ้อ',
-      description: 'แนะนำการตั้งราคาและรักษา Margin ท่ามกลางต้นทุนวัตถุดิบผันผวน',
-      prompt: 'เงินเฟ้อและต้นทุนแบบนี้ ควรตั้งราคาหรือลดต้นทุนอย่างไร',
-    },
-    {
-      type: 'palette',
-      title: 'จำลองฉากทัศน์ What-if',
-      description: 'คำนวณกำไรคาดการณ์หากลดต้นทุนวัตถุดิบลง 5%',
-      prompt: 'จำลองฉากทัศน์ What-if หากลดต้นทุนวัตถุดิบลง 5% กำไรสุทธิจะเป็นอย่างไร',
-    },
-  ],
-  finance: [
-    {
-      type: 'star',
-      title: 'วิเคราะห์ต้นทุนวัตถุดิบ 52%',
-      description: 'เจาะลึกวัตถุดิบและบรรจุภัณฑ์ที่เพิ่มขึ้น 6.2%',
-      prompt: 'ต้นทุนไหนกินกำไรมากที่สุด และลดตัวไหนได้เร็วที่สุด',
-    },
-    {
-      type: 'palette',
-      title: 'จุดคุ้มทุน (Break-even)',
-      description: 'คำนวณยอดขายขั้นต่ำต่อวันเพื่อไม่ให้ร้านขาดทุน',
-      prompt: 'คำนวณจุดคุ้มทุน (Break-even point) และยอดขายขั้นต่ำต่อวันให้หน่อย',
-    },
-    {
-      type: 'pencil',
-      title: 'ควบคุมค่าใช้จ่ายดำเนินงาน',
-      description: 'บริหารจัดการค่าไฟ ค่าเช่า และค่าแรงให้สอดคล้องยอดขาย',
-      prompt: 'ช่วยวางแผนควบคุมค่าใช้จ่ายดำเนินงานและค่าแรงพนักงาน',
-    },
-  ],
-  market: [
-    {
-      type: 'star',
-      title: 'เทียบยอดขายกับ GDP สศช.',
-      description: 'ร้านโต 12.4% เทียบ GDP ภาคบริการ (+3.8%)',
-      prompt: 'วิเคราะห์ยอดขายร้านเทียบกับ GDP ประเทศและสภาวะตลาดให้หน่อย',
-    },
-    {
-      type: 'pencil',
-      title: 'ดัชนีบริโภคเอกชน ธปท.',
-      description: 'กำลังซื้อผู้บริโภคโต 2.1% กระทบยอดขายกาแฟอย่างไร',
-      prompt: 'กำลังซื้อและดัชนีบริโภคของ ธปท. ส่งผลต่อยอดขายกาแฟอย่างไร',
-    },
-    {
-      type: 'palette',
-      title: 'โอกาสจากเทศกาลและท่องเที่ยว',
-      description: 'เตรียมสต็อกและโปรโมชันรองรับลูกค้าช่วงไฮซีซั่น',
-      prompt: 'แนวโน้มท่องเที่ยวและเทศกาลปลายปี จะดันยอดขายร้านได้แค่ไหน',
-    },
-  ],
-  strategy: [
-    {
-      type: 'star',
-      title: 'กลยุทธ์ราคา (Tiered Pricing)',
-      description: 'คงราคาเมนูหลัก ปรับเฉพาะพรีเมียมเพื่อรักษาลูกค้า',
-      prompt: 'เงินเฟ้อและต้นทุนแบบนี้ ควรตั้งราคาหรือลดต้นทุนอย่างไร',
-    },
-    {
-      type: 'pencil',
-      title: 'จัดเซ็ตคอมโบดันยอดต่อบิล',
-      description: 'เพิ่ม Basket size จาก ฿318 เป็น ฿360 ด้วยเครื่องดื่มคู่เบเกอรี่',
-      prompt: 'แนะนำการจัดชุดเซ็ตเมนู (Bundling) เพื่อดันกำไรต่อบิล',
-    },
-    {
-      type: 'palette',
-      title: 'จำลองฉากทัศน์ราคา What-if',
-      description: 'ถ้าปรับราคาขึ้น 5% ลูกค้าลดลง 2% กำไรสุทธิจะเป็นอย่างไร',
-      prompt: 'จำลองฉากทัศน์ What-if หากลดต้นทุนวัตถุดิบลง 5% กำไรสุทธิจะเป็นอย่างไร',
-    },
-  ],
-  planning: [
-    {
-      type: 'star',
-      title: 'Action Plan 30 วันแรก',
-      description: 'ลำดับขั้นตอนปฏิบัติเพื่อลดต้นทุนบรรจุภัณฑ์และเพิ่มกำไร',
-      prompt: 'สรุป Action Plan สำหรับ 30 วันข้างหน้าในการลดต้นทุนและรักษากำไร',
-    },
-    {
-      type: 'pencil',
-      title: 'ตั้งเป้าหมาย KPI ไตรมาสหน้า',
-      description: 'กำหนดเป้า Gross Margin 28% และยอดขายเติบโตต่อเนื่อง',
-      prompt: 'ช่วยวางเป้าหมาย KPI และตัวชี้วัดสำคัญสำหรับไตรมาสถัดไป',
-    },
-    {
-      type: 'palette',
-      title: 'แผนเพิ่มยอดขาย Delivery',
-      description: 'ประเมินความคุ้มค่าค่า GP และการเพิ่มยอดขายนอกร้าน',
-      prompt: 'วางแผนเพิ่มสัดส่วนยอดขาย Delivery โดยไม่ให้กระทบกำไรสุทธิ',
-    },
-  ],
+function roleFromConversation(role?: SpecialistType): SpecialistRole {
+  return role === 'finance' || role === 'market' || role === 'strategy' || role === 'planning' ? role : 'all'
 }
 
-const currentSuggestions = computed(() => suggestionsByRole[activeSpecialist.value] || suggestionsByRole.all)
+function roleForConversation(role: SpecialistRole | null): SpecialistType {
+  return role && role !== 'all' ? role : 'general'
+}
+
+function roleLabel(role?: SpecialistType) {
+  return specialistRoles.find((item) => item.id === roleFromConversation(role))?.label ?? 'ภาพรวม (All)'
+}
+
+function selectSpecialist(role: SpecialistRole) {
+  activeSpecialist.value = role
+  roleModalOpen.value = false
+  nextTick(() => composerEl.value?.focus())
+}
+
+function startWithPrompt(prompt: string) {
+  startNewChat(false)
+  activeSpecialist.value = 'all'
+  void send(prompt)
+}
 
 const quickPrompts = computed(() => {
+  if (!activeSpecialist.value) return []
+  const profile = industryProfile
   if (activeSpecialist.value === 'finance') {
-    return ['ต้นทุนไหนกินกำไรที่สุด', 'คำนวณจุดคุ้มทุนรายวัน', 'ควบคุมค่าแรงพนักงาน', 'บริหารกระแสเงินสด']
+    return [
+      `ต้นทุนหลักของ${profile.shortLabel}`,
+      'คำนวณจุดคุ้มทุน',
+      profile.sample.costLabels.labor,
+      'บริหารกระแสเงินสด',
+    ]
   }
   if (activeSpecialist.value === 'market') {
-    return ['ยอดขายโตเพราะเรา หรือเพราะตลาดพาไป?', 'วิเคราะห์เทียบ GDP สศช.', 'กำลังซื้อผู้บริโภค ธปท.', 'แนวโน้มท่องเที่ยวปลายปี']
+    return [
+      `ภาพรวมตลาด ${profile.shortLabel}`,
+      'วิเคราะห์เทียบ GDP',
+      'เงินเฟ้อกระทบอย่างไร',
+      'แนวโน้มกำลังซื้อ',
+    ]
   }
   if (activeSpecialist.value === 'strategy') {
-    return ['กลยุทธ์ตั้งราคาในภาวะเงินเฟ้อ', 'จัดเซ็ตเมนูดันยอดบิล', 'เจรจาซัพพลายเออร์ลดต้นทุน', 'รักษาลูกค้าประจำ']
+    return [
+      'กลยุทธ์ตั้งราคา',
+      `เพิ่มรายได้จาก${profile.shortLabel}`,
+      `ลด${profile.sample.costLabels.materials}`,
+      'รักษาลูกค้าประจำ',
+    ]
   }
   if (activeSpecialist.value === 'planning') {
-    return ['สรุป Action Plan 30 วัน', 'วางเป้าหมาย KPI ไตรมาสถัดไป', 'แผนควบคุมต้นทุนบรรจุภัณฑ์', 'ขั้นตอนเตรียมรับไฮซีซั่น']
+    return [
+      'สรุป Action Plan 30 วัน',
+      'วางเป้าหมาย KPI',
+      `แผนควบคุม${profile.sample.costLabels.materials}`,
+      'ขั้นตอนเตรียมรับไฮซีซั่น',
+    ]
   }
-  return [
-    'ยอดขายโตเพราะเรา หรือเพราะตลาดพาไป?',
-    'วิเคราะห์เทียบ GDP & เงินเฟ้อ',
-    'กลยุทธ์ตั้งราคาในภาวะเงินเฟ้อ',
-    'ต้นทุนไหนกินกำไรที่สุด',
-  ]
+  return profile.sample.quickPrompts
 })
 
 watch(
@@ -243,14 +204,15 @@ watch(
     const pendingPrompt = routeSearch.value.prompt
     const pendingChat = routeSearch.value.chat
     if (pendingPrompt) {
-      startNewChat()
-      void send(pendingPrompt)
+      startWithPrompt(pendingPrompt)
     } else if (pendingChat && pendingChat !== 'new') {
       const conversation = history.value.find((item) => item.id === pendingChat)
       if (conversation) selectConversation(conversation)
-      else startNewChat()
-    } else {
+      else openChatPicker()
+    } else if (pendingChat === 'new') {
       startNewChat()
+    } else {
+      openChatPicker()
     }
   },
   { immediate: true },
@@ -260,8 +222,7 @@ watch(
   () => routeSearch.value.prompt,
   (prompt, previous) => {
     if (!initialized.value || !prompt || prompt === previous) return
-    startNewChat()
-    void send(prompt)
+    startWithPrompt(prompt)
   },
 )
 
@@ -269,8 +230,20 @@ watch(
   () => routeSearch.value.chat,
   (chat, previous) => {
     if (!initialized.value || chat === previous) return
-    if (!chat || chat === 'new') {
-      if (activeId.value !== null) startNewChat()
+    if (chat === 'new') {
+      if (ignoreNextChatReset) {
+        ignoreNextChatReset = false
+        return
+      }
+      startNewChat()
+      return
+    }
+    if (!chat) {
+      if (ignoreNextChatReset) {
+        ignoreNextChatReset = false
+        return
+      }
+      openChatPicker()
       return
     }
     if (chat === activeId.value) return
@@ -346,26 +319,58 @@ function selectConversation(conversation: Conversation) {
     return
   }
   activeId.value = conversation.id
+  activeSpecialist.value = roleFromConversation(conversation.specialistRole)
+  roleModalOpen.value = false
+  chatPickerOpen.value = false
   messages.value = cloneMessages(conversation.messages)
   nextTick(scrollToBottom)
 }
 
-function startNewChat() {
+function resetChatView() {
+  activeId.value = null
+  activeSpecialist.value = null
+  messages.value = []
+  composer.value = ''
+  contextOpen.value = false
+}
+
+function startNewChat(openRoleModal = true) {
   if (isStreaming.value) {
     toast.info('กำลังสร้างคำตอบ', 'กดหยุดคำตอบก่อนเริ่มแชทใหม่')
     return
   }
-  activeId.value = null
-  messages.value = []
-  composer.value = ''
-  contextOpen.value = false
-  nextTick(() => composerEl.value?.focus())
+  resetChatView()
+  roleModalOpen.value = openRoleModal
+  chatPickerOpen.value = false
+}
+
+function openChatPicker() {
+  if (isStreaming.value) {
+    toast.info('กำลังสร้างคำตอบ', 'กดหยุดคำตอบก่อนเปลี่ยนบทสนทนา')
+    return
+  }
+  resetChatView()
+  roleModalOpen.value = false
+  chatPickerOpen.value = true
+}
+
+function startNewChatFromPicker() {
+  chatPickerOpen.value = false
+  ignoreNextChatReset = true
+  startNewChat()
+  void router.navigate({ to: '/app/assistant', search: { chat: 'new' }, replace: true })
+}
+
+function chooseConversationFromPicker(conversation: Conversation) {
+  chatPickerOpen.value = false
+  chooseConversation(conversation)
 }
 
 function syncConversation(conversationId: string) {
   const conversation = history.value.find((item) => item.id === conversationId)
   if (!conversation) return
   conversation.messages = cloneMessages(messages.value)
+  conversation.specialistRole = roleForConversation(activeSpecialist.value)
   const lastAnswer = [...messages.value]
     .reverse()
     .find((message) => message.role === 'assistant' && message.content.trim())
@@ -387,9 +392,8 @@ function handleFileChange(event: Event) {
   const file = input.files?.[0]
   if (!file) return
 
-  const allowed = ['.csv', '.xlsx', '.xls']
-  if (!allowed.some((extension) => file.name.toLowerCase().endsWith(extension))) {
-    toast.error('ไฟล์ไม่รองรับ', 'รองรับไฟล์ CSV หรือ Excel')
+  if (!file.name.toLowerCase().endsWith('.csv')) {
+    toast.error('ไฟล์ไม่รองรับ', 'สำหรับการแชท รองรับไฟล์ CSV เท่านั้น')
     input.value = ''
     return
   }
@@ -408,14 +412,37 @@ function removeAttachment() {
 }
 
 async function send(rawQuestion: string) {
+  if (!activeSpecialist.value) {
+    roleModalOpen.value = true
+    return
+  }
   const attachment = attachedFile.value
   const question = rawQuestion.trim() || (attachment ? 'ช่วยวิเคราะห์ไฟล์นี้ให้หน่อย' : '')
   if (!question || isStreaming.value) return
 
+  const specialist = roleForConversation(activeSpecialist.value)
+  let attachmentPayload: { name: string; content: string } | null = null
+  if (attachment) {
+    try {
+      attachmentPayload = { name: attachment.name, content: (await attachment.text()).slice(0, 20000) }
+    } catch {
+      toast.error('อ่านไฟล์ไม่สำเร็จ', 'กรุณาตรวจสอบไฟล์ CSV แล้วลองใหม่')
+      return
+    }
+  }
+  const historyPayload = messages.value
+    .filter((message) => message.content.trim() && !message.error && !message.streaming)
+    .slice(-12)
+    .map((message) => ({ role: message.role, content: message.content }))
+  const agentIds = activeBoardroomAgents.value
+    .filter((agent) => agent.enabled)
+    .map((agent) => agent.id)
+    .slice(0, 6)
   composer.value = ''
   attachedFile.value = null
   if (!activeId.value) {
     const conversation = createConversation(question.slice(0, 56))
+    conversation.specialistRole = specialist
     history.value.unshift(conversation)
     activeId.value = conversation.id
   }
@@ -425,16 +452,28 @@ async function send(rawQuestion: string) {
     void router.navigate({ to: '/app/assistant', search: { chat: conversationId }, replace: true })
   }
   const userContent = attachment ? `${question}\n\n[ไฟล์แนบ: ${attachment.name}]` : question
-  messages.value.push(createMessage('user', userContent))
-  messages.value.push(createMessage('assistant'))
+  const userMessage = createMessage('user', userContent)
+  userMessage.specialistRole = specialist
+  const assistantMessage = createMessage('assistant')
+  assistantMessage.specialistRole = specialist
+  messages.value.push(userMessage)
+  messages.value.push(assistantMessage)
   const answerIndex = messages.value.length - 1
   isStreaming.value = true
   stopRequested.value = false
+  streamController = new AbortController()
   await nextTick()
   scrollToBottom()
 
   try {
-    for await (const event of streamAiReply(question)) {
+    for await (const event of streamAiReply(question, {
+      industryId: industryFocus.value,
+      specialistRole: specialist,
+      agentIds,
+      history: historyPayload,
+      attachment: attachmentPayload,
+      signal: streamController.signal,
+    })) {
       if (stopRequested.value) break
       if (event.type === 'token') {
         messages.value[answerIndex].content += event.value ?? ''
@@ -448,11 +487,13 @@ async function send(rawQuestion: string) {
     }
   } catch (error) {
     const answer = messages.value[answerIndex]
-    answer.error = true
-    if (!answer.content.trim()) {
-      answer.content = 'ขออภัยครับ ระบบไม่สามารถสร้างคำตอบได้ในขณะนี้ กรุณาลองถามอีกครั้ง'
+    if (!stopRequested.value && !streamController?.signal.aborted) {
+      answer.error = true
+      if (!answer.content.trim()) {
+        answer.content = 'ขออภัยครับ ระบบไม่สามารถสร้างคำตอบได้ในขณะนี้ กรุณาลองถามอีกครั้ง'
+      }
+      toast.error('AI ตอบไม่สำเร็จ', error instanceof Error ? error.message : 'กรุณาลองใหม่')
     }
-    toast.error('AI ตอบไม่สำเร็จ', error instanceof Error ? error.message : 'กรุณาลองใหม่')
   } finally {
     const answer = messages.value[answerIndex]
     if (answer) {
@@ -463,6 +504,7 @@ async function send(rawQuestion: string) {
     }
     isStreaming.value = false
     stopRequested.value = false
+    streamController = null
     syncConversation(conversationId)
     await nextTick()
     scrollToBottom()
@@ -488,13 +530,15 @@ function newChatFromHistory() {
     toast.info('กำลังสร้างคำตอบ', 'กดหยุดคำตอบก่อนเริ่มแชทใหม่')
     return
   }
+  ignoreNextChatReset = true
   startNewChat()
   historyOpen.value = false
-  void router.navigate({ to: '/app/assistant', search: {}, replace: true })
+  void router.navigate({ to: '/app/assistant', search: { chat: 'new' }, replace: true })
 }
 
 function stopAnswer() {
   stopRequested.value = true
+  streamController?.abort()
 }
 
 function toggleVoiceInput() {
@@ -515,7 +559,7 @@ function toggleVoiceInput() {
 }
 
 function openComposerSettings() {
-  toast.info('การตั้งค่าโมเดล AI', 'ใช้โมเดล ROOKAR Intelligence v2.4 (High Precision)')
+  void router.navigate({ to: '/app/settings' })
 }
 
 function handleKeydown(event: KeyboardEvent) {
@@ -546,15 +590,12 @@ async function copyMessage(text: string) {
 
 <template>
   <div class="flex h-full min-h-0 overflow-hidden bg-white">
-  <section class="relative flex min-w-0 flex-1 flex-col overflow-hidden bg-white">
+  <section
+    class="relative flex min-w-0 flex-1 flex-col bg-white"
+    :class="messages.length === 0 ? 'overflow-y-auto' : 'overflow-hidden'"
+  >
     <!-- Top Left: Multi-Agent Boardroom & Vault trigger -->
-    <div
-      class="absolute top-3 z-20 flex items-center gap-2 transition-all duration-200"
-      :class="[
-        'left-14',
-        !sidebarCollapsed ? 'lg:left-4' : 'lg:left-14',
-      ]"
-    >
+    <div class="absolute left-14 top-3 z-20 flex items-center gap-2 transition-all duration-200 lg:left-4">
       <button
         type="button"
         class="inline-flex items-center gap-1.5 rounded-full bg-[#f4f5f7] px-2.5 py-1 text-xs font-medium text-ink transition hover:bg-[#eceef1]"
@@ -562,6 +603,14 @@ async function copyMessage(text: string) {
       >
         <Users class="h-3.5 w-3.5 text-muted" />
         <span>ทีม AI ({{ activeBoardroomAgents.length }})</span>
+      </button>
+      <button
+        type="button"
+        class="inline-flex items-center gap-1.5 rounded-full bg-[#f4f5f7] px-2.5 py-1 text-xs font-medium text-ink transition hover:bg-[#eceef1]"
+        @click="openChatPicker"
+      >
+        <History class="h-3.5 w-3.5 text-muted" />
+        <span>เลือกแชท</span>
       </button>
     </div>
 
@@ -588,8 +637,12 @@ async function copyMessage(text: string) {
     </button>
 
     <div
+      :class="messages.length === 0 ? 'my-auto flex w-full flex-col' : 'flex min-h-0 flex-1 flex-col'"
+    >
+    <div
       ref="messageList"
-      class="no-scrollbar min-h-0 flex-1 overflow-y-auto px-4 pb-4 pt-16 sm:px-6 sm:pb-6"
+      class="no-scrollbar px-4 sm:px-6"
+      :class="messages.length === 0 ? 'pb-0 pt-6' : 'min-h-0 flex-1 overflow-y-auto pb-4 pt-16 sm:pb-6'"
       role="log"
       aria-label="บทสนทนากับ AI"
       aria-live="polite"
@@ -600,77 +653,24 @@ async function copyMessage(text: string) {
         <div class="skeleton h-24 w-4/5 rounded-2xl" />
       </div>
 
-      <div v-else-if="messages.length === 0" class="flex h-full flex-col justify-center py-4 sm:justify-start sm:pt-[11vh]">
+      <div v-else-if="messages.length === 0" class="flex flex-col">
         <div class="mx-auto w-full max-w-2xl text-center">
-          <div class="mx-auto flex h-20 w-20 items-center justify-center overflow-hidden rounded-full bg-neutral-100">
-            <img src="/ai-avatar.png" alt="ROOKAR AI" class="h-full w-full object-cover" />
-          </div>
-          <h3 class="mt-4 text-[32px] font-bold tracking-tight text-ink sm:text-[38px]">
+          <h3 class="text-[32px] font-bold tracking-tight text-ink sm:text-[38px]">
             ยินดีต้อนรับ, {{ firstName }}!
           </h3>
           <p class="mx-auto mt-2 max-w-md text-[13px] leading-relaxed text-muted">
             วันนี้อยากให้ ROOKAR ช่วยวิเคราะห์อะไรดีครับ?
           </p>
 
-          <!-- Specialist AI Role Switcher (ตาม Slide 3 & 4 ของ Pitch Deck) -->
-          <div class="mt-6 flex flex-wrap items-center justify-center gap-1.5 p-1 rounded-2xl bg-[#f4f5f7] max-w-2xl mx-auto">
-            <button
-              v-for="role in specialistRoles"
-              :key="role.id"
-              type="button"
-              :class="[
-                'flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold transition',
-                activeSpecialist === role.id ? 'bg-black text-white shadow-xs' : 'text-neutral-600 hover:text-black hover:bg-white/80'
-              ]"
-              @click="activeSpecialist = role.id"
-            >
-              <component :is="role.icon" class="h-3.5 w-3.5" />
-              <span>{{ role.label }}</span>
-            </button>
-          </div>
+          <button
+            type="button"
+            class="mt-3 inline-flex items-center gap-1.5 rounded-full bg-[#f4f5f7] px-3 py-1.5 text-[11.5px] font-semibold text-ink transition hover:bg-[#eceef1]"
+            @click="roleModalOpen = true"
+          >
+            <Info class="h-3.5 w-3.5 text-muted" aria-hidden="true" />
+            ดูรายละเอียดผู้เชี่ยวชาญ
+          </button>
 
-          <!-- Active Agents Preview -->
-          <div class="mt-4 flex items-center justify-center gap-2 text-xs text-muted">
-            <span class="text-[11.5px]">ทีม AI:</span>
-            <div class="flex items-center gap-1.5">
-              <button
-                v-for="a in activeBoardroomAgents"
-                :key="a.id"
-                type="button"
-                class="rounded-full bg-neutral-100 px-2.5 py-0.5 text-[11px] font-medium text-ink transition hover:bg-neutral-200"
-                @click="openAgentLogic(a.id)"
-              >
-                {{ a.name.split(' ')[0] }}
-              </button>
-              <button
-                type="button"
-                class="rounded-full p-1 text-muted transition hover:bg-neutral-100 hover:text-ink"
-                title="จัดการทีม Agent"
-                @click="openVaultGeneral"
-              >
-                <Plus class="h-3 w-3" />
-              </button>
-            </div>
-          </div>
-
-          <div class="mt-7 grid grid-cols-1 gap-3.5 text-left sm:grid-cols-3">
-            <button
-              v-for="suggestion in currentSuggestions"
-              :key="suggestion.title"
-              type="button"
-              class="card-fade group p-5 text-left transition-all duration-300 focus-visible:outline-none"
-              @click="send(suggestion.prompt)"
-            >
-              <!-- Card Content: Fastwork Flat Bento Style -->
-              <div class="relative z-10 flex min-h-[120px] flex-col justify-between">
-                <div>
-                  <PastelIcon :type="suggestion.type" />
-                  <span class="mt-4 block text-[13.5px] font-bold tracking-tight text-ink">{{ suggestion.title }}</span>
-                </div>
-                <span class="mt-3 block text-[11px] font-medium leading-relaxed text-muted">{{ suggestion.description }}</span>
-              </div>
-            </button>
-          </div>
         </div>
       </div>
 
@@ -685,10 +685,13 @@ async function copyMessage(text: string) {
       </div>
     </div>
 
-    <div class="shrink-0 px-4 pb-4 pt-2 sm:px-6 sm:pb-6 sm:pt-3">
+    <div
+      class="shrink-0 px-4 sm:px-6"
+      :class="messages.length === 0 ? 'pb-6 pt-6 sm:pb-8 sm:pt-8' : 'pb-4 pt-2 sm:pb-6 sm:pt-3'"
+    >
       <div class="mx-auto w-full max-w-3xl">
         <!-- Quick Prompts from Active Specialist Role -->
-        <div class="mb-2 flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-0.5">
+        <div v-if="activeSpecialist" class="mb-2 flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-0.5">
           <span class="shrink-0 text-[11px] font-semibold text-muted flex items-center gap-1 mr-1">
             <component :is="specialistRoles.find(r => r.id === activeSpecialist)?.icon" class="h-3 w-3" />
             {{ specialistRoles.find(r => r.id === activeSpecialist)?.label }}:
@@ -729,8 +732,9 @@ async function copyMessage(text: string) {
               v-model="composer"
               rows="1"
               maxlength="1000"
-              placeholder="✦ ถามเกี่ยวกับยอดขาย ต้นทุน หรือสั่งให้ AI วิเคราะห์..."
-              class="max-h-[132px] min-h-[32px] flex-1 resize-none bg-transparent py-0.5 text-[13.5px] leading-relaxed text-ink placeholder:text-muted/65 focus:outline-none"
+              :disabled="!activeSpecialist || isStreaming"
+              :placeholder="activeSpecialist ? '✦ ถามเกี่ยวกับยอดขาย ต้นทุน หรือสั่งให้ AI วิเคราะห์...' : 'เลือกผู้เชี่ยวชาญก่อนเริ่มพิมพ์…'"
+              class="max-h-[132px] min-h-[32px] flex-1 resize-none bg-transparent py-0.5 text-[13.5px] leading-relaxed text-ink placeholder:text-muted/65 focus:outline-none disabled:cursor-not-allowed"
               aria-label="คำถามถึง AI"
               @keydown="handleKeydown"
             />
@@ -739,7 +743,7 @@ async function copyMessage(text: string) {
             <button
               type="button"
               class="inline-flex h-8.5 items-center gap-1.5 rounded-full bg-white px-3.5 text-[11.5px] font-medium text-ink-soft transition hover:bg-neutral-100 hover:text-ink focus-visible:bg-neutral-100 focus-visible:text-ink disabled:pointer-events-none disabled:opacity-45"
-              :disabled="isStreaming"
+              :disabled="!activeSpecialist || isStreaming"
               aria-label="แนบไฟล์"
               @click="pickFile"
             >
@@ -750,7 +754,7 @@ async function copyMessage(text: string) {
               ref="fileInput"
               type="file"
               class="sr-only"
-              accept=".csv,.xlsx,.xls"
+              accept=".csv"
               @change="handleFileChange"
             />
             <button
@@ -777,9 +781,10 @@ async function copyMessage(text: string) {
             <button
               type="button"
               :class="[
-                'inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition-colors',
+                'inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition-colors disabled:pointer-events-none disabled:opacity-40',
                 isListening ? 'bg-rose-500 text-white' : 'text-muted hover:bg-neutral-200 hover:text-ink'
               ]"
+              :disabled="!activeSpecialist"
               aria-label="คำสั่งเสียง (Voice input)"
               title="คำสั่งเสียง (Voice input)"
               @click="toggleVoiceInput"
@@ -800,7 +805,7 @@ async function copyMessage(text: string) {
               v-else
               type="button"
               class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-ink text-white transition hover:bg-black disabled:bg-ink-100 disabled:text-faint"
-              :disabled="!composer.trim() && !attachedFile"
+              :disabled="!activeSpecialist || (!composer.trim() && !attachedFile)"
               aria-label="ส่งคำถาม"
               @click="send(composer)"
             >
@@ -810,16 +815,18 @@ async function copyMessage(text: string) {
         </div>
       </div>
     </div>
+    </div>
   </section>
 
   <!-- Desktop Chat History Sidebar (Silky Smooth Negative-Margin Slide) -->
   <aside
     :class="[
-      'relative hidden h-full w-[332px] shrink-0 p-3 xl:block',
+      'relative hidden h-full shrink-0 p-3 xl:block',
       'transition-[margin] duration-300 ease-in-out will-change-[margin-right]',
     ]"
     :style="{
-      marginRight: historyCollapsed ? '-332px' : '0px',
+      width: `${historyPanelWidth}px`,
+      marginRight: historyCollapsed ? `-${historyPanelWidth}px` : '0px',
     }"
     aria-label="ประวัติการสนทนา"
   >
@@ -911,6 +918,91 @@ async function copyMessage(text: string) {
       @close="historyOpen = false"
     />
   </AppSheet>
+
+  <AppModal
+    :open="chatPickerOpen"
+    title="เลือกบทสนทนา"
+    description="เลือกแชทที่ต้องการคุยต่อ หรือเริ่มแชทใหม่"
+    size="lg"
+    @update:open="chatPickerOpen = $event"
+  >
+    <div class="space-y-3">
+      <button
+        type="button"
+        class="flex w-full items-center gap-3 rounded-2xl bg-black px-4 py-3 text-left text-white transition hover:bg-neutral-800"
+        @click="startNewChatFromPicker"
+      >
+        <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/15">
+          <Plus class="h-4 w-4" aria-hidden="true" />
+        </span>
+        <span class="min-w-0 flex-1">
+          <span class="block text-[13px] font-semibold">เริ่มแชทใหม่</span>
+          <span class="block text-[11.5px] text-neutral-300">เลือกผู้เชี่ยวชาญ AI ก่อนเริ่มพิมพ์</span>
+        </span>
+      </button>
+
+      <div v-if="history.length === 0" class="rounded-2xl border border-dashed border-neutral-300 p-8 text-center">
+        <p class="text-[13px] font-semibold text-ink">ยังไม่มีประวัติแชท</p>
+        <p class="mt-1 text-[11.5px] text-muted">เริ่มแชทใหม่เพื่อให้ ROOKAR ช่วยวิเคราะห์ธุรกิจของคุณ</p>
+      </div>
+
+      <div v-else class="space-y-2">
+        <button
+          v-for="conversation in history"
+          :key="conversation.id"
+          type="button"
+          class="flex w-full items-start gap-3 rounded-2xl bg-white p-4 text-left ring-1 ring-black/5 transition hover:ring-black/15"
+          @click="chooseConversationFromPicker(conversation)"
+        >
+          <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-neutral-100 text-ink">
+            <MessageSquare class="h-4 w-4" aria-hidden="true" />
+          </span>
+          <span class="min-w-0 flex-1">
+            <span class="flex items-center gap-2">
+              <span class="truncate text-[13px] font-semibold text-ink">{{ conversation.title }}</span>
+              <span class="shrink-0 rounded-full bg-neutral-100 px-2 py-0.5 text-[10px] font-semibold text-muted">
+                {{ roleLabel(conversation.specialistRole) }}
+              </span>
+            </span>
+            <span class="mt-0.5 block truncate text-[11.5px] text-muted">{{ conversation.preview || 'ยังไม่มีข้อความ' }}</span>
+          </span>
+          <span class="shrink-0 text-[10.5px] text-muted">{{ timeAgo(conversation.updatedAt) }}</span>
+        </button>
+      </div>
+    </div>
+  </AppModal>
+
+  <AppModal
+    :open="roleModalOpen"
+    title="เลือกผู้เชี่ยวชาญ AI"
+    description="เลือกบทบาทก่อนเริ่มพิมพ์คำถาม ROOKAR จะใช้มุมมองนี้ตลอดบทสนทนา"
+    size="lg"
+    @update:open="roleModalOpen = $event"
+  >
+    <div class="grid gap-3 sm:grid-cols-2">
+      <button
+        v-for="role in specialistRoles"
+        :key="role.id"
+        type="button"
+        :class="[
+          'flex items-start gap-3 rounded-2xl border p-4 text-left transition',
+          activeSpecialist === role.id
+            ? 'border-black bg-ink-50'
+            : 'border-black/10 bg-white hover:border-black/20 hover:bg-neutral-50',
+        ]"
+        @click="selectSpecialist(role.id)"
+      >
+        <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-ink ring-1 ring-black/5">
+          <component :is="role.icon" class="h-5 w-5" aria-hidden="true" />
+        </span>
+        <span class="min-w-0 flex-1">
+          <span class="block text-[13px] font-semibold text-ink">{{ role.label }}</span>
+          <span class="mt-0.5 block text-[11.5px] leading-relaxed text-muted">{{ role.desc }}</span>
+        </span>
+        <Check v-if="activeSpecialist === role.id" class="mt-0.5 h-4 w-4 shrink-0 text-ink" aria-hidden="true" />
+      </button>
+    </div>
+  </AppModal>
 
   <!-- Agent Vault & Custom Boardroom Modal with Chat Permissions & Logic Inspector -->
   <AgentVaultModal

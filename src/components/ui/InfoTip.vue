@@ -27,14 +27,14 @@ withDefaults(
           class="inline-flex h-8 w-8 items-center justify-center rounded-full text-faint transition hover:bg-brand-50 hover:text-brand-600 focus-visible:bg-brand-50 focus-visible:text-brand-600 focus-visible:outline-none"
           aria-label="ข้อมูลเพิ่มเติม"
         >
-          <Info class="h-3.5 w-3.5" aria-hidden="true" />
+          <Info class="info-tip-icon h-3.5 w-3.5" aria-hidden="true" />
         </button>
       </TooltipTrigger>
       <TooltipPortal>
         <TooltipContent
           :side="side"
           :side-offset="7"
-          class="z-[70] max-w-[260px] rounded-lg bg-ink-100 px-3 py-2 text-xs leading-relaxed text-ink shadow-float"
+          class="info-tip-content z-[70] max-w-[260px] rounded-lg bg-ink-100 px-3 py-2 text-xs leading-relaxed text-ink shadow-float"
         >
           {{ text }}
           <TooltipArrow class="fill-ink-100" />

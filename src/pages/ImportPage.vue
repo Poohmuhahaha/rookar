@@ -5,13 +5,14 @@ import { useQueryClient } from '@tanstack/vue-query'
 import {
   ArrowLeft,
   ArrowRight,
-  Boxes,
+  Check,
   CheckCircle2,
   CircleAlert,
   CloudUpload,
   Download,
   FileSpreadsheet,
   FileUp,
+  Package,
   ReceiptText,
   RotateCcw,
   ShieldCheck,
@@ -22,9 +23,10 @@ import {
   X,
 } from '@lucide/vue'
 import AppButton from '@/components/ui/AppButton.vue'
+import AppModal from '@/components/ui/AppModal.vue'
 import AppStepper from '@/components/ui/AppStepper.vue'
 import PageHeader from '@/components/ui/PageHeader.vue'
-import { commitImport, createImportPreview } from '@/lib/mockApi'
+import { commitImport, createImportPreview, validateImport } from '@/lib/mockApi'
 import { formatFileSize, formatNumber } from '@/lib/format'
 import { useToast } from '@/lib/toast'
 import { cn } from '@/lib/cn'
@@ -33,6 +35,9 @@ import type { DataSource, DataType, ImportPreview } from '@/types'
 const router = useRouter()
 const toast = useToast()
 const queryClient = useQueryClient()
+
+withDefaults(defineProps<{ embedded?: boolean }>(), { embedded: false })
+const emit = defineEmits<{ back: []; skip: []; complete: [] }>()
 
 const steps = [
   { label: 'อัปโหลด', hint: 'เลือกไฟล์' },
@@ -53,7 +58,7 @@ const dataTypeMeta: Record<
   materials: {
     label: 'ต้นทุนวัตถุดิบ',
     description: 'ค่าวัตถุดิบและบรรจุภัณฑ์',
-    icon: Boxes,
+    icon: Package,
   },
   labor: {
     label: 'ค่าแรง',
@@ -76,34 +81,35 @@ interface FieldDef {
 
 const mappingDefs: Record<DataType, FieldDef[]> = {
   sales: [
-    { key: 'date', label: 'วันที่', required: true, keywords: ['วันที่', 'date', 'วัน'] },
-    { key: 'amount', label: 'ยอดขาย', required: true, keywords: ['ยอดขาย', 'amount', 'total', 'รายได้'] },
-    { key: 'orders', label: 'จำนวนออเดอร์', required: false, keywords: ['ออเดอร์', 'order', 'จำนวน'] },
-    { key: 'channel', label: 'ช่องทางขาย', required: false, keywords: ['ช่องทาง', 'channel'] },
+    { key: 'date', label: 'วันที่', required: true, keywords: ['วันที่', 'date', 'วัน', 'transaction', 'period'] },
+    { key: 'amount', label: 'ยอดขาย', required: true, keywords: ['ยอดขาย', 'amount', 'total', 'รายได้', 'sales', 'revenue', 'gross'] },
+    { key: 'orders', label: 'จำนวนออเดอร์', required: false, keywords: ['ออเดอร์', 'order', 'จำนวน', 'bill', 'transaction'] },
+    { key: 'channel', label: 'ช่องทางขาย', required: false, keywords: ['ช่องทาง', 'channel', 'platform', 'source'] },
   ],
   materials: [
     { key: 'date', label: 'วันที่', required: true, keywords: ['วันที่', 'date'] },
-    { key: 'item', label: 'ชื่อวัตถุดิบ', required: true, keywords: ['วัตถุดิบ', 'item', 'name', 'สินค้า'] },
-    { key: 'quantity', label: 'จำนวน', required: false, keywords: ['จำนวน', 'quantity', 'qty'] },
-    { key: 'unitPrice', label: 'ราคาต่อหน่วย', required: false, keywords: ['ราคาต่อหน่วย', 'unit', 'price'] },
-    { key: 'total', label: 'ยอดรวม', required: true, keywords: ['รวม', 'total', 'amount'] },
+    { key: 'item', label: 'ชื่อวัตถุดิบ', required: true, keywords: ['วัตถุดิบ', 'item', 'name', 'สินค้า', 'material', 'product', 'sku'] },
+    { key: 'quantity', label: 'จำนวน', required: false, keywords: ['จำนวน', 'quantity', 'qty', 'volume'] },
+    { key: 'unitPrice', label: 'ราคาต่อหน่วย', required: false, keywords: ['ราคาต่อหน่วย', 'unit', 'price', 'unitprice'] },
+    { key: 'total', label: 'ยอดรวม', required: true, keywords: ['รวม', 'total', 'amount', 'cost', 'ต้นทุน'] },
   ],
   labor: [
     { key: 'date', label: 'วันที่', required: true, keywords: ['วันที่', 'date'] },
-    { key: 'name', label: 'ชื่อพนักงาน', required: true, keywords: ['ชื่อพนักงาน', 'พนักงาน', 'name'] },
-    { key: 'role', label: 'ตำแหน่ง', required: false, keywords: ['ตำแหน่ง', 'role'] },
-    { key: 'hours', label: 'ชั่วโมงทำงาน', required: false, keywords: ['ชั่วโมง', 'hour'] },
-    { key: 'amount', label: 'ค่าแรง', required: true, keywords: ['ค่าแรง', 'เงินเดือน', 'amount', 'salary'] },
+    { key: 'name', label: 'ชื่อพนักงาน', required: true, keywords: ['ชื่อพนักงาน', 'พนักงาน', 'name', 'employee', 'staff'] },
+    { key: 'role', label: 'ตำแหน่ง', required: false, keywords: ['ตำแหน่ง', 'role', 'position'] },
+    { key: 'hours', label: 'ชั่วโมงทำงาน', required: false, keywords: ['ชั่วโมง', 'hour', 'hours'] },
+    { key: 'amount', label: 'ค่าแรง', required: true, keywords: ['ค่าแรง', 'เงินเดือน', 'amount', 'salary', 'wage'] },
   ],
   expenses: [
     { key: 'date', label: 'วันที่', required: true, keywords: ['วันที่', 'date'] },
-    { key: 'category', label: 'หมวดหมู่', required: true, keywords: ['หมวดหมู่', 'category', 'ประเภท'] },
-    { key: 'description', label: 'รายละเอียด', required: false, keywords: ['รายละเอียด', 'description', 'detail'] },
-    { key: 'amount', label: 'จำนวนเงิน', required: true, keywords: ['จำนวนเงิน', 'amount', 'total', 'รวม'] },
+    { key: 'category', label: 'หมวดหมู่', required: true, keywords: ['หมวดหมู่', 'category', 'ประเภท', 'type'] },
+    { key: 'description', label: 'รายละเอียด', required: false, keywords: ['รายละเอียด', 'description', 'detail', 'note'] },
+    { key: 'amount', label: 'จำนวนเงิน', required: true, keywords: ['จำนวนเงิน', 'amount', 'total', 'รวม', 'expense', 'cost'] },
   ],
 }
 
 const step = ref(0)
+const templateOpen = ref(false)
 const selectedType = ref<DataType>('sales')
 const file = ref<File | null>(null)
 const preview = ref<ImportPreview | null>(null)
@@ -114,6 +120,22 @@ const loadingPreview = ref(false)
 const committing = ref(false)
 const mapping = reactive<Record<string, string>>({})
 
+interface AiSuggestion {
+  type: DataType
+  confidence: number
+  reason: string
+}
+
+const aiClassifying = ref(false)
+const aiSuggestion = ref<AiSuggestion | null>(null)
+
+const aiKeywords: Record<DataType, string[]> = {
+  sales: ['sale', 'sales', 'revenue', 'pos', 'order', 'channel', 'ยอดขาย', 'รายได้', 'ออเดอร์', 'ช่องทาง'],
+  materials: ['material', 'ingredient', 'stock', 'inventory', 'sku', 'วัตถุดิบ', 'สินค้า', 'สต็อก'],
+  labor: ['payroll', 'salary', 'wage', 'employee', 'staff', 'labor', 'พนักงาน', 'เงินเดือน', 'ค่าแรง', 'ชั่วโมง'],
+  expenses: ['expense', 'opex', 'rent', 'marketing', 'ค่าใช้จ่าย', 'ค่าเช่า', 'การตลาด', 'หมวดหมู่'],
+}
+
 const fieldDefs = computed(() => mappingDefs[selectedType.value])
 const missingRequired = computed(() =>
   fieldDefs.value.filter((field) => field.required && !mapping[field.key]),
@@ -123,6 +145,9 @@ const mappedCount = computed(
 )
 const columnOptions = computed(() => (preview.value?.columns ?? []).map((column) => ({ value: column, label: column })))
 const importCount = computed(() => preview.value?.validRows ?? 0)
+const columnHint = computed(() =>
+  fieldDefs.value.map((field) => `${field.label}${field.required ? '*' : ''}`).join(' · '),
+)
 const totalRows = computed(() =>
   preview.value
     ? preview.value.validRows + preview.value.duplicateRows + preview.value.errorRows
@@ -145,6 +170,8 @@ function resetAll() {
   file.value = null
   preview.value = null
   createdSource.value = null
+  aiSuggestion.value = null
+  aiClassifying.value = false
   for (const key of Object.keys(mapping)) delete mapping[key]
   if (fileInput.value) fileInput.value.value = ''
 }
@@ -161,7 +188,73 @@ function setFile(nextFile: File) {
   file.value = nextFile
   preview.value = null
   createdSource.value = null
+  aiSuggestion.value = null
   step.value = 0
+  void classifyFile(nextFile)
+}
+
+async function classifyFile(target: File) {
+  aiClassifying.value = true
+  try {
+    const text = (await target.text()).replace(/^\uFEFF/, '')
+    const firstLine = text.split(/\r?\n/).find((line) => line.trim()) ?? ''
+    const header = firstLine.toLowerCase()
+    const fileName = target.name.toLowerCase()
+    let bestType: DataType = selectedType.value
+    let bestScore = 0
+    let bestMatched: string[] = []
+
+    for (const type of Object.keys(mappingDefs) as DataType[]) {
+      let score = 0
+      const matched: string[] = []
+      for (const field of mappingDefs[type]) {
+        if (field.keywords.some((keyword) => header.includes(keyword.toLowerCase()))) {
+          score += field.required ? 3 : 1
+          matched.push(field.label)
+        }
+      }
+      for (const keyword of aiKeywords[type]) {
+        if (header.includes(keyword) || fileName.includes(keyword)) score += 2
+      }
+      if (score > bestScore) {
+        bestScore = score
+        bestType = type
+        bestMatched = matched
+      }
+    }
+
+    if (file.value !== target) return
+    if (bestScore === 0) {
+      aiSuggestion.value = {
+        type: selectedType.value,
+        confidence: 0,
+        reason: 'ยังจับสัญญาณจากหัวตารางไม่ได้ เลือกประเภทเองได้เลย',
+      }
+      return
+    }
+
+    const confidence = Math.min(94, 50 + bestScore * 4)
+    aiSuggestion.value = {
+      type: bestType,
+      confidence,
+      reason: bestMatched.length
+        ? `พบคอลัมน์: ${bestMatched.join(', ')}`
+        : 'จับคู่จากชื่อไฟล์และหัวตาราง',
+    }
+
+    if (confidence >= 80 && selectedType.value !== bestType) {
+      selectedType.value = bestType
+      toast.info('AI แยกประเภทไฟล์ให้แล้ว', `${dataTypeMeta[bestType].label} · ความมั่นใจ ${confidence}%`)
+    }
+  } finally {
+    if (file.value === target) aiClassifying.value = false
+  }
+}
+
+function applyAiSuggestion() {
+  if (!aiSuggestion.value) return
+  selectedType.value = aiSuggestion.value.type
+  toast.info('ใช้ประเภทที่ AI แนะนำ', dataTypeMeta[aiSuggestion.value.type].label)
 }
 
 function onFileChange(event: Event) {
@@ -179,6 +272,8 @@ function handleDrop(event: DragEvent) {
 function removeFile() {
   file.value = null
   preview.value = null
+  aiSuggestion.value = null
+  aiClassifying.value = false
   if (fileInput.value) fileInput.value.value = ''
 }
 
@@ -217,14 +312,15 @@ const sampleCsv: Record<DataType, string> = {
   ].join('\n'),
 }
 
-function useSampleFile() {
-  const label = dataTypeMeta[selectedType.value].label
-  const sample = new File([`\uFEFF${sampleCsv[selectedType.value]}`], `sample-${selectedType.value}.csv`, {
-    type: 'text/csv;charset=utf-8',
-  })
-  file.value = sample
-  preview.value = null
-  toast.info('เพิ่มไฟล์ตัวอย่างแล้ว', `ข้อมูลตัวอย่าง${label} 5 แถว`)
+function downloadTemplate() {
+  const content = `\uFEFF${sampleCsv[selectedType.value]}`
+  const url = URL.createObjectURL(new Blob([content], { type: 'text/csv;charset=utf-8;' }))
+  const anchor = document.createElement('a')
+  anchor.href = url
+  anchor.download = `rookar-template-${selectedType.value}.csv`
+  anchor.click()
+  URL.revokeObjectURL(url)
+  toast.success('ดาวน์โหลดเทมเพลตแล้ว', `เทมเพลต${dataTypeMeta[selectedType.value].label}`)
 }
 
 async function inspectFile() {
@@ -241,10 +337,21 @@ async function inspectFile() {
   }
 }
 
-function nextFromMapping() {
+async function nextFromMapping() {
   if (missingRequired.value.length) {
     toast.error('จับคู่คอลัมน์ไม่ครบ', 'กรุณาเลือกคอลัมน์สำหรับช่องที่จำเป็น')
     return
+  }
+  if (preview.value?.previewId) {
+    loadingPreview.value = true
+    try {
+      preview.value = await validateImport(preview.value.previewId, { ...mapping })
+    } catch (error) {
+      toast.error('ตรวจสอบข้อมูลไม่สำเร็จ', error instanceof Error ? error.message : 'กรุณาลองใหม่')
+      return
+    } finally {
+      loadingPreview.value = false
+    }
   }
   step.value = 2
 }
@@ -253,7 +360,7 @@ async function finishImport() {
   if (!preview.value || committing.value) return
   committing.value = true
   try {
-    createdSource.value = await commitImport(preview.value)
+    createdSource.value = await commitImport(preview.value, { ...mapping })
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ['sources'] }),
       queryClient.invalidateQueries({ queryKey: ['dashboard'] }),
@@ -296,10 +403,12 @@ watch(selectedType, () => {
 </script>
 
 <template>
-  <div class="space-y-5">
+  <div :class="embedded ? 'space-y-4' : 'space-y-5'">
     <PageHeader
+      v-if="!embedded"
       title="นำเข้าข้อมูล"
       description="นำเข้าไฟล์ CSV เพื่อให้ ROOKAR สรุปภาพรวมและหาโอกาสทางธุรกิจให้อัตโนมัติ"
+      :breadcrumb="{ label: 'แหล่งข้อมูล', to: '/app/data-sources' }"
     >
       <template #actions>
         <AppButton variant="secondary" @click="router.navigate({ to: '/app/data-sources' })">
@@ -308,56 +417,41 @@ watch(selectedType, () => {
       </template>
     </PageHeader>
 
-    <div class="card-fade-static p-6 sm:p-7">
+    <div v-if="!embedded" class="card-fade-static p-6 sm:p-7">
       <div class="relative z-10">
         <AppStepper :current="step" :steps="steps" compact />
       </div>
     </div>
 
-    <section class="card-fade-static p-6 sm:p-7">
+    <section :class="embedded ? '' : 'card-fade-static p-6 sm:p-7'">
       <div class="relative z-10">
-      <Transition name="step" mode="out-in">
+      <Transition name="step" mode="out-in" :css="!embedded">
         <form v-if="step === 0" key="upload" @submit.prevent="inspectFile">
-          <p class="text-[11px] font-medium text-brand-700">ขั้นที่ 1 จาก 4</p>
-          <h2 class="mt-2 text-h2 font-semibold tracking-tight text-ink">เลือกข้อมูลที่ต้องการนำเข้า</h2>
-          <p class="mt-2 text-[13px] leading-relaxed text-muted">
-            เริ่มจากประเภทข้อมูลที่ตรงกับไฟล์ของคุณ ระบบจะแนะนำการจับคู่คอลัมน์ให้อัตโนมัติ
-          </p>
-
-          <div class="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <button
-              v-for="(meta, type) in dataTypeMeta"
-              :key="type"
-              type="button"
-              :class="
-                cn(
-                  'flex items-start gap-3 rounded-2xl p-4 text-left transition-all duration-200 focus-visible:outline-none',
-                  selectedType === type
-                    ? 'bg-black text-white'
-                    : 'bg-white/70 text-ink hover:bg-white',
-                )
-              "
-              :aria-pressed="selectedType === type"
-              @click="selectedType = type as DataType"
-            >
-              <component
-                :is="meta.icon"
-                :class="cn('mt-0.5 h-4 w-4 shrink-0 transition-colors', selectedType === type ? 'text-white' : 'text-neutral-500')"
-                aria-hidden="true"
-              />
-              <span class="min-w-0 flex-1">
-                <span :class="cn('block text-[13.5px] font-bold', selectedType === type ? 'text-white' : 'text-ink')">{{ meta.label }}</span>
-                <span :class="cn('mt-1 block text-[11px] font-medium leading-relaxed', selectedType === type ? 'text-neutral-300' : 'text-muted')">{{ meta.description }}</span>
-              </span>
-              <CheckCircle2 v-if="selectedType === type" class="mt-0.5 h-4 w-4 shrink-0 text-white" aria-hidden="true" />
-            </button>
+          <p v-if="!embedded" class="text-[11px] font-medium text-brand-700">ขั้นที่ 1 จาก 4</p>
+          <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <h2 class="mt-2 text-h2 font-semibold tracking-tight text-ink">
+                {{ file ? 'เลือกประเภทข้อมูล' : 'อัปโหลดไฟล์ข้อมูล' }}
+              </h2>
+              <p class="mt-2 text-[13px] leading-relaxed text-muted">
+                {{ file
+                  ? 'AI ช่วยแยกประเภทให้แล้ว ตรวจสอบและเลือกประเภทที่ถูกต้องก่อนดำเนินการต่อ'
+                  : 'ลากไฟล์ CSV มาวาง หรือเลือกไฟล์ เพื่อให้ระบบช่วยแยกประเภทให้อัตโนมัติ' }}
+              </p>
+            </div>
+            <AppButton variant="secondary" size="md" class="shrink-0 sm:mt-2" @click="templateOpen = true">
+              <template #left>
+                <Download class="h-4 w-4" aria-hidden="true" />
+              </template>
+              Download template
+            </AppButton>
           </div>
 
           <div
             :class="
               cn(
                 'mt-5 rounded-2xl p-8 text-center transition-colors',
-                dragActive ? 'bg-brand-50' : 'bg-[#f4f5f7]',
+                dragActive ? 'bg-brand-50' : embedded ? 'bg-white' : 'bg-[#f4f5f7]',
               )
             "
             role="button"
@@ -406,43 +500,158 @@ watch(selectedType, () => {
               </button>
             </template>
             <template v-else>
-              <CloudUpload class="mx-auto h-7 w-7 text-brand-400" aria-hidden="true" />
-              <p class="mt-3 text-[13px] font-medium text-ink">
-                ลากไฟล์มาวาง หรือ <span class="text-brand-700 underline underline-offset-2">เลือกไฟล์</span>
-              </p>
-              <p class="mt-1 text-[11.5px] text-muted">รองรับไฟล์ CSV · ขนาดไม่เกิน 10 MB</p>
+              <template v-if="embedded">
+                <CloudUpload class="mx-auto h-8 w-8 text-ink" aria-hidden="true" />
+                <p class="mt-3 text-[13px] font-medium text-ink">ลากไฟล์มาวาง หรือ</p>
+                <span class="mt-2 inline-flex h-9 items-center rounded-full bg-black px-4 text-[12px] font-semibold text-white">
+                  เลือกไฟล์
+                </span>
+                <p class="mt-2 text-[11.5px] text-muted">รองรับไฟล์ CSV · ขนาดไม่เกิน 10 MB</p>
+              </template>
+              <template v-else>
+                <CloudUpload class="mx-auto h-7 w-7 text-brand-400" aria-hidden="true" />
+                <p class="mt-3 text-[13px] font-medium text-ink">
+                  ลากไฟล์มาวาง หรือ <span class="text-brand-700 underline underline-offset-2">เลือกไฟล์</span>
+                </p>
+                <p class="mt-1 text-[11.5px] text-muted">รองรับไฟล์ CSV · ขนาดไม่เกิน 10 MB</p>
+              </template>
             </template>
           </div>
 
-          <div class="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <button
-              type="button"
-              class="inline-flex h-10 items-center gap-1.5 text-[12px] font-medium text-muted transition hover:text-brand-700"
-              @click="useSampleFile"
-            >
-              <Sparkles class="h-4 w-4 text-accent-600" aria-hidden="true" />
-              ยังไม่มีไฟล์? ลองใช้ไฟล์ตัวอย่าง
-            </button>
-            <p class="text-[11px] text-muted">ข้อมูลจะถูกเก็บในเครื่องของคุณระหว่างทดลอง</p>
+          <div v-if="file" class="mt-3 rounded-2xl bg-white p-4 text-left">
+            <div class="flex items-start gap-3">
+              <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-black text-white">
+                <Sparkles class="h-4 w-4" aria-hidden="true" />
+              </div>
+              <div class="min-w-0 flex-1">
+                <div class="flex items-center gap-2">
+                  <p class="text-[12px] font-semibold text-ink">AI ช่วยแยกประเภทไฟล์</p>
+                  <Loader2 v-if="aiClassifying" class="h-3.5 w-3.5 animate-spin text-muted" aria-label="กำลังวิเคราะห์" />
+                </div>
+                <p v-if="aiClassifying" class="mt-1 text-[11.5px] leading-relaxed text-muted">
+                  กำลังอ่านหัวตารางและชื่อไฟล์...
+                </p>
+                <template v-else-if="aiSuggestion">
+                  <p class="mt-1 text-[11.5px] leading-relaxed text-muted">
+                    แนะนำ:
+                    <span class="font-semibold text-ink">{{ dataTypeMeta[aiSuggestion.type].label }}</span>
+                    <span v-if="aiSuggestion.confidence > 0"> · ความมั่นใจ {{ aiSuggestion.confidence }}%</span>
+                  </p>
+                  <p class="mt-0.5 text-[11px] leading-relaxed text-muted">{{ aiSuggestion.reason }}</p>
+                </template>
+                <p v-else class="mt-1 text-[11.5px] leading-relaxed text-muted">
+                  ยังไม่ได้วิเคราะห์ไฟล์
+                </p>
+              </div>
+              <button
+                v-if="aiSuggestion && !aiClassifying && selectedType !== aiSuggestion.type"
+                type="button"
+                class="inline-flex h-8 shrink-0 items-center justify-center rounded-full bg-neutral-100 px-3 text-[11px] font-semibold text-ink transition hover:bg-neutral-200"
+                @click="applyAiSuggestion"
+              >
+                ใช้ประเภทนี้
+              </button>
+              <span
+                v-else-if="aiSuggestion && !aiClassifying"
+                class="inline-flex h-8 shrink-0 items-center justify-center rounded-full bg-neutral-100 px-3 text-[11px] font-semibold text-ink"
+              >
+                ใช้อยู่
+              </span>
+            </div>
           </div>
 
-          <div class="mt-6 flex justify-end">
-            <AppButton type="submit" size="lg" :disabled="!file" :loading="loadingPreview">
-              ตรวจสอบไฟล์
-              <template #right>
-                <ArrowRight v-if="!loadingPreview" class="h-4 w-4" aria-hidden="true" />
-              </template>
-            </AppButton>
+          <div v-if="file" class="mt-5">
+            <div v-if="embedded" class="grid auto-rows-fr grid-cols-1 gap-2.5 sm:grid-cols-2">
+              <div
+                v-for="(meta, type) in dataTypeMeta"
+                :key="type"
+                :class="
+                  cn(
+                    'group h-full min-h-[112px] cursor-pointer overflow-hidden rounded-2xl text-left transition-all',
+                    selectedType === type ? 'bg-black text-white' : 'bg-neutral-200 text-ink hover:bg-neutral-300/70',
+                  )
+                "
+                @click="selectedType = type"
+              >
+                <div class="flex h-full items-stretch">
+                  <span
+                    :class="
+                      cn(
+                        'flex w-24 shrink-0 items-center justify-center rounded-2xl transition-colors sm:w-28',
+                        selectedType === type ? 'bg-white/10 text-white' : 'bg-white text-neutral-600',
+                      )
+                    "
+                    aria-hidden="true"
+                  >
+                    <component :is="meta.icon" class="h-12 w-12 sm:h-14 sm:w-14" />
+                  </span>
+                  <div class="flex min-w-0 flex-1 flex-col justify-center px-4 py-3">
+                    <div class="flex w-full items-center gap-2">
+                      <span :class="cn('block text-[14.5px] font-semibold', selectedType === type ? 'text-white' : 'text-ink')">{{ meta.label }}</span>
+                      <Check v-if="selectedType === type" class="ml-auto h-4 w-4 shrink-0 text-white" aria-hidden="true" />
+                    </div>
+                    <span :class="cn('mt-1 block text-[12.5px] leading-snug line-clamp-2', selectedType === type ? 'text-neutral-300' : 'text-muted')">{{ meta.description }}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div v-else class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <button
+                v-for="(meta, type) in dataTypeMeta"
+                :key="type"
+                type="button"
+                :class="
+                  cn(
+                    'flex items-start gap-3 rounded-2xl p-4 text-left transition-all duration-200 focus-visible:outline-none',
+                    selectedType === type ? 'bg-black text-white' : 'bg-white/70 text-ink hover:bg-white',
+                  )
+                "
+                :aria-pressed="selectedType === type"
+                @click="selectedType = type as DataType"
+              >
+                <component
+                  :is="meta.icon"
+                  :class="cn('mt-0.5 h-4 w-4 shrink-0 transition-colors', selectedType === type ? 'text-white' : 'text-neutral-500')"
+                  aria-hidden="true"
+                />
+                <span class="min-w-0 flex-1">
+                  <span :class="cn('block text-[13.5px] font-bold', selectedType === type ? 'text-white' : 'text-ink')">{{ meta.label }}</span>
+                  <span :class="cn('mt-1 block text-[11px] font-medium leading-relaxed', selectedType === type ? 'text-neutral-300' : 'text-muted')">{{ meta.description }}</span>
+                </span>
+                <CheckCircle2 v-if="selectedType === type" class="mt-0.5 h-4 w-4 shrink-0 text-white" aria-hidden="true" />
+              </button>
+            </div>
+          </div>
+
+          <div class="mt-6 flex flex-col-reverse gap-2 pt-5 sm:flex-row sm:items-center sm:justify-end sm:gap-3">
+            <div class="flex flex-col gap-2 sm:flex-row">
+              <AppButton v-if="embedded" variant="secondary" size="lg" @click="emit('skip')">
+                ข้ามขั้นตอนนี้
+              </AppButton>
+              <AppButton v-if="embedded" variant="ghost" size="lg" @click="emit('back')">
+                <template #left>
+                  <ArrowLeft class="h-4 w-4" aria-hidden="true" />
+                </template>
+                ย้อนกลับ
+              </AppButton>
+              <AppButton type="submit" size="lg" :disabled="!file" :loading="loadingPreview">
+                ตรวจสอบไฟล์
+                <template #right>
+                  <ArrowRight v-if="!loadingPreview" class="h-4 w-4" aria-hidden="true" />
+                </template>
+              </AppButton>
+            </div>
           </div>
         </form>
 
         <form v-else-if="step === 1" key="mapping" @submit.prevent="nextFromMapping">
           <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
-              <p class="text-[11px] font-medium text-brand-700">ขั้นที่ 2 จาก 4</p>
+              <p v-if="!embedded" class="text-[11px] font-medium text-brand-700">ขั้นที่ 2 จาก 4</p>
               <h2 class="mt-2 text-h2 font-semibold tracking-tight text-ink">จับคู่คอลัมน์</h2>
               <p class="mt-2 max-w-xl text-[13px] leading-relaxed text-muted">
-                ตรวจสอบว่าคอลัมน์ในไฟล์ตรงกับข้อมูลที่ ROOKAR ต้องใช้
+                ไม่ต้องมีฟอร์แมตเดียวกับเทมเพลต เลือกจับคู่คอลัมน์ในไฟล์กับข้อมูลที่ ROOKAR ต้องใช้
                 ระบบจับคู่ให้แล้ว {{ mappedCount }} จาก {{ fieldDefs.length }} ช่อง
               </p>
             </div>
@@ -495,24 +704,43 @@ watch(selectedType, () => {
             ยังไม่ได้จับคู่ {{ missingRequired.map((field) => field.label).join(', ') }}
           </div>
 
-          <div class="mt-6 flex items-center justify-between gap-3 pt-5">
-            <AppButton variant="ghost" size="lg" @click="back">
-              <template #left>
-                <ArrowLeft class="h-4 w-4" aria-hidden="true" />
-              </template>
-              ย้อนกลับ
-            </AppButton>
-            <AppButton type="submit" size="lg">
-              ตรวจสอบข้อมูล
-              <template #right>
-                <ArrowRight class="h-4 w-4" aria-hidden="true" />
-              </template>
-            </AppButton>
+          <div :class="embedded ? 'mt-6 flex items-center justify-end gap-3 pt-5' : 'mt-6 flex items-center justify-between gap-3 pt-5'">
+            <template v-if="embedded">
+              <AppButton variant="secondary" size="lg" @click="emit('skip')">
+                ข้ามขั้นตอนนี้
+              </AppButton>
+              <AppButton variant="ghost" size="lg" @click="back">
+                <template #left>
+                  <ArrowLeft class="h-4 w-4" aria-hidden="true" />
+                </template>
+                ย้อนกลับ
+              </AppButton>
+              <AppButton type="submit" size="lg">
+                ตรวจสอบข้อมูล
+                <template #right>
+                  <ArrowRight class="h-4 w-4" aria-hidden="true" />
+                </template>
+              </AppButton>
+            </template>
+            <template v-else>
+              <AppButton variant="ghost" size="lg" @click="back">
+                <template #left>
+                  <ArrowLeft class="h-4 w-4" aria-hidden="true" />
+                </template>
+                ย้อนกลับ
+              </AppButton>
+              <AppButton type="submit" size="lg">
+                ตรวจสอบข้อมูล
+                <template #right>
+                  <ArrowRight class="h-4 w-4" aria-hidden="true" />
+                </template>
+              </AppButton>
+            </template>
           </div>
         </form>
 
         <form v-else-if="step === 2 && preview" key="review" @submit.prevent="finishImport">
-          <p class="text-[11px] font-medium text-brand-700">ขั้นที่ 3 จาก 4</p>
+          <p v-if="!embedded" class="text-[11px] font-medium text-brand-700">ขั้นที่ 3 จาก 4</p>
           <h2 class="mt-2 text-h2 font-semibold tracking-tight text-ink">ตรวจสอบก่อนนำเข้า</h2>
           <p class="mt-2 text-[13px] leading-relaxed text-muted">
             พบ {{ formatNumber(totalRows) }} แถวในไฟล์ {{ preview.fileName }} ตรวจสอบแถวที่มีปัญหาให้ครบก่อนยืนยัน
@@ -597,19 +825,38 @@ watch(selectedType, () => {
             </p>
           </div>
 
-          <div class="mt-6 flex flex-col-reverse gap-2 pt-5 sm:flex-row sm:items-center sm:justify-between">
-            <AppButton variant="ghost" size="lg" :disabled="committing" @click="back">
-              <template #left>
-                <ArrowLeft class="h-4 w-4" aria-hidden="true" />
-              </template>
-              ย้อนกลับ
-            </AppButton>
-            <AppButton type="submit" size="lg" :loading="committing" :disabled="importCount === 0">
-              นำเข้า {{ formatNumber(importCount) }} แถว
-              <template #right>
-                <FileUp v-if="!committing" class="h-4 w-4" aria-hidden="true" />
-              </template>
-            </AppButton>
+          <div :class="embedded ? 'mt-6 flex flex-col-reverse gap-2 pt-5 sm:flex-row sm:items-center sm:justify-end sm:gap-3' : 'mt-6 flex flex-col-reverse gap-2 pt-5 sm:flex-row sm:items-center sm:justify-between'">
+            <template v-if="embedded">
+              <AppButton variant="secondary" size="lg" @click="emit('skip')">
+                ข้ามขั้นตอนนี้
+              </AppButton>
+              <AppButton variant="ghost" size="lg" :disabled="committing" @click="back">
+                <template #left>
+                  <ArrowLeft class="h-4 w-4" aria-hidden="true" />
+                </template>
+                ย้อนกลับ
+              </AppButton>
+              <AppButton type="submit" size="lg" :loading="committing" :disabled="importCount === 0">
+                นำเข้า {{ formatNumber(importCount) }} แถว
+                <template #right>
+                  <FileUp v-if="!committing" class="h-4 w-4" aria-hidden="true" />
+                </template>
+              </AppButton>
+            </template>
+            <template v-else>
+              <AppButton variant="ghost" size="lg" :disabled="committing" @click="back">
+                <template #left>
+                  <ArrowLeft class="h-4 w-4" aria-hidden="true" />
+                </template>
+                ย้อนกลับ
+              </AppButton>
+              <AppButton type="submit" size="lg" :loading="committing" :disabled="importCount === 0">
+                นำเข้า {{ formatNumber(importCount) }} แถว
+                <template #right>
+                  <FileUp v-if="!committing" class="h-4 w-4" aria-hidden="true" />
+                </template>
+              </AppButton>
+            </template>
           </div>
         </form>
 
@@ -632,8 +879,14 @@ watch(selectedType, () => {
           </div>
 
           <div class="mt-6 flex flex-col items-center justify-center gap-2 sm:flex-row">
-            <AppButton size="lg" @click="router.navigate({ to: '/app' })">
+            <AppButton v-if="!embedded" size="lg" @click="router.navigate({ to: '/app' })">
               ไปที่ภาพรวม
+              <template #right>
+                <ArrowRight class="h-4 w-4" aria-hidden="true" />
+              </template>
+            </AppButton>
+            <AppButton v-else size="lg" @click="emit('complete')">
+              ดำเนินการต่อ
               <template #right>
                 <ArrowRight class="h-4 w-4" aria-hidden="true" />
               </template>
@@ -646,6 +899,7 @@ watch(selectedType, () => {
             </AppButton>
           </div>
           <button
+            v-if="!embedded"
             type="button"
             class="mt-4 text-[12px] font-medium text-brand-700 underline-offset-2 hover:underline"
             @click="router.navigate({ to: '/app/data-sources' })"
@@ -657,8 +911,34 @@ watch(selectedType, () => {
       </div>
     </section>
 
-    <p v-if="step < 3" class="pt-2 text-center text-[11.5px] leading-relaxed text-muted">
+    <p v-if="step < 3 && !embedded" class="pt-2 text-center text-[11.5px] leading-relaxed text-muted">
       ข้อมูลในเวอร์ชันทดลองถูกเก็บไว้ในเบราว์เซอร์ของคุณเท่านั้น · ลบได้ทุกเมื่อจากหน้าแหล่งข้อมูล
     </p>
+
+    <AppModal
+      v-model:open="templateOpen"
+      title="รูปแบบไฟล์ CSV ที่แนะนำ"
+      description="ใช้เทมเพลตนี้เพื่อให้ระบบจับคู่คอลัมน์ได้แม่นยำขึ้น"
+      size="lg"
+    >
+      <div class="space-y-3 text-[12px] leading-relaxed text-muted">
+        <p>ไฟล์ UTF-8 · รองรับ comma / semicolon / tab · วันที่ใช้ YYYY-MM-DD · ตัวเลขไม่ใส่ comma</p>
+        <p>
+          คอลัมน์{{ dataTypeMeta[selectedType].label }}:
+          <span class="font-medium text-ink">{{ columnHint }}</span>
+          <span class="ml-1">(* จำเป็น)</span>
+        </p>
+        <p>ชื่อหรือลำดับคอลัมน์ต่างจากเทมเพลตได้ · ถ้าไม่มีหัวตาราง ระบบจะสร้างชื่อคอลัมน์ให้แล้วจับคู่เองในขั้นถัดไป</p>
+      </div>
+      <template #footer>
+        <AppButton variant="secondary" @click="templateOpen = false">ปิด</AppButton>
+        <AppButton @click="downloadTemplate">
+          <template #left>
+            <Download class="h-4 w-4" aria-hidden="true" />
+          </template>
+          Download template
+        </AppButton>
+      </template>
+    </AppModal>
   </div>
 </template>

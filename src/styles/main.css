@@ -28,6 +28,7 @@
 
   --color-canvas: #ffffff;
   --color-surface: #f4f5f7;
+  --color-surface-table: #e7eaed;
   --color-line: transparent;
   --color-line-strong: transparent;
   --color-ink: #09090b;
@@ -414,6 +415,11 @@
   display: none !important;
 }
 
+/* Data table card: slightly darker surface to separate from white canvas */
+.data-table-surface {
+  background: var(--color-surface-table);
+}
+
 /* Global Zero Stroke & Zero Shadow Override per User Request */
 *,
 *::before,
@@ -422,4 +428,206 @@
   -webkit-box-shadow: none !important;
   text-shadow: none !important;
   border-color: transparent !important;
+}
+
+/* Large-screen typography scale */
+@media (min-width: 1440px) and (max-width: 1919px) {
+    .text-\[9px\] { font-size: 9.5px; line-height: 1.4; }
+    .text-\[9\.5px\] { font-size: 10.25px; line-height: 1.4; }
+    .text-\[10px\] { font-size: 11px; line-height: 1.4; }
+    .text-\[10\.5px\] { font-size: 11.75px; line-height: 1.4; }
+    .text-\[11px\] { font-size: 12.5px; line-height: 1.4; }
+    .text-\[11\.5px\] { font-size: 13.25px; line-height: 1.4; }
+    .text-\[12px\] { font-size: 14px; line-height: 1.4; }
+    .text-\[12\.5px\] { font-size: 14.75px; line-height: 1.4; }
+    .text-\[13px\] { font-size: 15.5px; line-height: 1.4; }
+    .text-\[13\.5px\] { font-size: 16.25px; line-height: 1.4; }
+    .text-\[14px\] { font-size: 17px; line-height: 1.4; }
+    .text-\[14\.5px\] { font-size: 17.75px; line-height: 1.4; }
+    .text-\[15px\] { font-size: 18.5px; line-height: 1.4; }
+    .text-\[17px\] { font-size: 21.5px; line-height: 1.4; }
+    .text-\[24px\] { font-size: 32px; line-height: 1.4; }
+    .text-\[25px\] { font-size: 33.5px; line-height: 1.4; }
+    .text-\[26px\] { font-size: 35px; line-height: 1.4; }
+    .text-\[27px\] { font-size: 36.5px; line-height: 1.4; }
+    .text-\[28px\] { font-size: 38px; line-height: 1.4; }
+    .text-\[32px\] { font-size: 44px; line-height: 1.4; }
+    .text-\[38px\] { font-size: 53px; line-height: 1.4; }
+    .text-xs { font-size: 0.875rem; line-height: 1.4; }
+    .text-sm { font-size: 1.0625rem; line-height: 1.4; }
+    .text-base { font-size: 1.25rem; line-height: 1.4; }
+    .text-lg { font-size: 1.4375rem; line-height: 1.4; }
+    .text-xl { font-size: 1.625rem; line-height: 1.4; }
+    .text-2xl { font-size: 2rem; line-height: 1.4; }
+    .text-3xl { font-size: 2.5625rem; line-height: 1.4; }
+    .text-4xl { font-size: 3.125rem; line-height: 1.4; }
+    .text-5xl { font-size: 4.25rem; line-height: 1.4; }
+    .text-6xl { font-size: 5.375rem; line-height: 1.4; }
+    .text-display { font-size: 3.5rem; line-height: 1.3; }
+    .text-h1 { font-size: 2.375rem; line-height: 1.3; }
+    .text-h2 { font-size: 1.8125rem; line-height: 1.3; }
+    .text-h3 { font-size: 1.4375rem; line-height: 1.3; }
+    .text-body-lg { font-size: 1.25rem; line-height: 1.3; }
+    .text-body { font-size: 1.0625rem; line-height: 1.3; }
+    .text-caption { font-size: 0.875rem; line-height: 1.3; }
+}
+
+@media (min-width: 1920px) {
+    .text-\[9px\] { font-size: 9.5px; line-height: 1.4; }
+    .text-\[9\.5px\] { font-size: 10.25px; line-height: 1.4; }
+    .text-\[10px\] { font-size: 11px; line-height: 1.4; }
+    .text-\[10\.5px\] { font-size: 11.75px; line-height: 1.4; }
+    .text-\[11px\] { font-size: 12.5px; line-height: 1.4; }
+    .text-\[11\.5px\] { font-size: 13.25px; line-height: 1.4; }
+    .text-\[12px\] { font-size: 14px; line-height: 1.4; }
+    .text-\[12\.5px\] { font-size: 14.75px; line-height: 1.4; }
+    .text-\[13px\] { font-size: 15.5px; line-height: 1.4; }
+    .text-\[13\.5px\] { font-size: 16.25px; line-height: 1.4; }
+    .text-\[14px\] { font-size: 17px; line-height: 1.4; }
+    .text-\[14\.5px\] { font-size: 17.75px; line-height: 1.4; }
+    .text-\[15px\] { font-size: 18.5px; line-height: 1.4; }
+    .text-\[17px\] { font-size: 21.5px; line-height: 1.4; }
+    .text-\[24px\] { font-size: 32px; line-height: 1.4; }
+    .text-\[25px\] { font-size: 33.5px; line-height: 1.4; }
+    .text-\[26px\] { font-size: 35px; line-height: 1.4; }
+    .text-\[27px\] { font-size: 36.5px; line-height: 1.4; }
+    .text-\[28px\] { font-size: 38px; line-height: 1.4; }
+    .text-\[32px\] { font-size: 44px; line-height: 1.4; }
+    .text-\[38px\] { font-size: 53px; line-height: 1.4; }
+    .text-xs { font-size: 0.875rem; line-height: 1.4; }
+    .text-sm { font-size: 1.0625rem; line-height: 1.4; }
+    .text-base { font-size: 1.25rem; line-height: 1.4; }
+    .text-lg { font-size: 1.4375rem; line-height: 1.4; }
+    .text-xl { font-size: 1.625rem; line-height: 1.4; }
+    .text-2xl { font-size: 2rem; line-height: 1.4; }
+    .text-3xl { font-size: 2.5625rem; line-height: 1.4; }
+    .text-4xl { font-size: 3.125rem; line-height: 1.4; }
+    .text-5xl { font-size: 4.25rem; line-height: 1.4; }
+    .text-6xl { font-size: 5.375rem; line-height: 1.4; }
+    .text-display { font-size: 3.5rem; line-height: 1.3; }
+    .text-h1 { font-size: 2.375rem; line-height: 1.3; }
+    .text-h2 { font-size: 1.8125rem; line-height: 1.3; }
+    .text-h3 { font-size: 1.4375rem; line-height: 1.3; }
+    .text-body-lg { font-size: 1.25rem; line-height: 1.3; }
+    .text-body { font-size: 1.0625rem; line-height: 1.3; }
+    .text-caption { font-size: 0.875rem; line-height: 1.3; }
+}
+
+@media (min-width: 1440px) {
+  .kpi-header {
+    flex-wrap: wrap;
+  }
+
+  .kpi-trend {
+    white-space: nowrap;
+  }
+
+  .kpi-value-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.2rem;
+  }
+
+  .kpi-note {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+  }
+
+  .settings-plan-btn {
+    height: auto;
+    min-height: 2.25rem;
+    padding-top: 0.5rem;
+    padding-bottom: 0.5rem;
+    line-height: 1.3;
+    white-space: normal;
+  }
+}
+
+@media (min-width: 1440px) and (max-width: 1919px) {
+  .chart-axis-label {
+    font-size: 12px;
+  }
+
+  .donut-center-label {
+    font-size: 11px;
+  }
+
+  .donut-center-value {
+    font-size: 17px;
+  }
+}
+
+@media (min-width: 1920px) {
+  .chart-axis-label {
+    font-size: 12px;
+  }
+
+  .donut-center-label {
+    font-size: 11px;
+  }
+
+  .donut-center-value {
+    font-size: 17px;
+  }
+}
+
+@media (min-width: 1440px) and (max-width: 1919px) {
+  .settings-popover {
+    width: 440px;
+    max-height: 88vh;
+  }
+
+  [role="dialog"].max-w-lg {
+    max-width: 720px;
+  }
+
+  [role="dialog"].max-w-2xl {
+    max-width: 1040px;
+  }
+
+  [role="dialog"].max-w-4xl {
+    max-width: 1320px;
+  }
+}
+
+@media (min-width: 1920px) {
+  .settings-popover {
+    width: 600px;
+    max-height: 90vh;
+  }
+
+  [role="dialog"].max-w-lg {
+    max-width: 920px;
+  }
+
+  [role="dialog"].max-w-2xl {
+    max-width: 1320px;
+  }
+
+  [role="dialog"].max-w-4xl {
+    max-width: 1680px;
+  }
+}
+
+@media (min-width: 1440px) and (max-width: 1919px) {
+  .info-tip-content {
+    max-width: 420px;
+  }
+
+  .info-tip-icon {
+    width: 1.25rem;
+    height: 1.25rem;
+  }
+}
+
+@media (min-width: 1920px) {
+  .info-tip-content {
+    max-width: 480px;
+  }
+
+  .info-tip-icon {
+    width: 1.5rem;
+    height: 1.5rem;
+  }
 }

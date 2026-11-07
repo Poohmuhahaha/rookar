@@ -1,6 +1,7 @@
 import { createApp } from 'vue'
 import { QueryClient, VueQueryPlugin } from '@tanstack/vue-query'
 import App from './App.vue'
+import { bootstrapSession } from './lib/session'
 
 import '@fontsource/inter/400.css'
 import '@fontsource/inter/500.css'
@@ -21,5 +22,7 @@ const queryClient = new QueryClient({
     },
   },
 })
+
+await bootstrapSession()
 
 createApp(App).use(VueQueryPlugin, { queryClient }).mount('#app')

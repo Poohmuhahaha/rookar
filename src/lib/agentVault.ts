@@ -1,5 +1,6 @@
 import { ref } from 'vue'
 import type { AgentProfile, AgentExpertiseLogic } from '@/types'
+import { apiFetch } from './api/client'
 
 const VAULT_STORAGE_KEY = 'rookar.agents.vault'
 
@@ -334,44 +335,60 @@ export function generateCustomExpertiseLogic(agent: Partial<AgentProfile>): Agen
   }
 }
 
-export const agentsList = ref<AgentProfile[]>(loadAgents())
+function normalizeAgents(items: AgentProfile[]): AgentProfile[] {
+  return items.map((item) => {
+    const defaultMatch = DEFAULT_AGENTS.find((d) => d.id === item.id)
+    if (defaultMatch) {
+      return {
+        ...defaultMatch,
+        ...item,
+        expertiseLogic: item.expertiseLogic || defaultMatch.expertiseLogic,
+      }
+    }
+    if (!item.expertiseLogic) item.expertiseLogic = generateCustomExpertiseLogic(item)
+    return item
+  })
+}
 
-function loadAgents(): AgentProfile[] {
-  if (typeof window === 'undefined') return DEFAULT_AGENTS
+function localAgents(): AgentProfile[] | null {
+  if (typeof window === 'undefined') return null
   try {
     const raw = localStorage.getItem(VAULT_STORAGE_KEY)
-    if (!raw) {
-      localStorage.setItem(VAULT_STORAGE_KEY, JSON.stringify(DEFAULT_AGENTS))
-      return DEFAULT_AGENTS
+    return raw ? normalizeAgents(JSON.parse(raw) as AgentProfile[]) : null
+  } catch {
+    return null
+  }
+}
+
+export const agentsList = ref<AgentProfile[]>([...DEFAULT_AGENTS])
+
+export async function hydrateAgents() {
+  try {
+    const data = await apiFetch<{ agents: AgentProfile[] | null }>('/agents')
+    if (data.agents?.length) {
+      agentsList.value = normalizeAgents(data.agents)
+      localStorage.setItem(VAULT_STORAGE_KEY, JSON.stringify(agentsList.value))
+      return
     }
-    const parsed: AgentProfile[] = JSON.parse(raw)
-    return parsed.map((item) => {
-      const defaultMatch = DEFAULT_AGENTS.find((d) => d.id === item.id)
-      if (defaultMatch) {
-        return {
-          ...defaultMatch,
-          ...item,
-          expertiseLogic: item.expertiseLogic || defaultMatch.expertiseLogic,
-        }
-      }
-      if (!item.expertiseLogic) {
-        item.expertiseLogic = generateCustomExpertiseLogic(item)
-      }
-      return item
-    })
-  } catch (err) {
-    console.error('Failed to load agents from storage:', err)
-    return DEFAULT_AGENTS
+    const local = localAgents()
+    agentsList.value = local?.length ? local : [...DEFAULT_AGENTS]
+    await persistAgents()
+  } catch {
+    agentsList.value = localAgents() ?? [...DEFAULT_AGENTS]
   }
 }
 
 function persistAgents() {
-  if (typeof window === 'undefined') return
+  if (typeof window === 'undefined') return Promise.resolve()
   try {
     localStorage.setItem(VAULT_STORAGE_KEY, JSON.stringify(agentsList.value))
-  } catch (err) {
-    console.error('Failed to persist agents:', err)
+  } catch {
+    // ignore local cache failures
   }
+  return apiFetch<{ ok: true }>('/agents', {
+    method: 'PUT',
+    body: JSON.stringify({ agents: agentsList.value }),
+  }).catch(() => undefined)
 }
 
 export function toggleAgentEnabled(agentId: string) {
