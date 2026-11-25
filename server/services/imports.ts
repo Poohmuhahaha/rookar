@@ -1,7 +1,24 @@
-import { db } from '../db'
+import { batchInChunks, db } from '../db'
+import { getRuntimeConfig, type SqlStatement } from '../runtime'
 import { newId, nowIso } from '../auth'
 import type { DataQuality, DataType, ImportErrorRow, ImportPreview } from '../../src/types'
-import { insertImportedRows } from './demo'
+import { INDUSTRY_PROFILES, type IndustryId } from '../../src/lib/industries'
+import { classifySourceText } from './industryClassifier'
+
+type ImportedRow = {
+  occurredOn: string | null
+  amount: number | null
+  label: string | null
+  payload: Record<string, string | number>
+}
+
+function importedRowStatements(sourceId: string, rows: ImportedRow[]): SqlStatement[] {
+  return rows.map((row, index) => ({
+    sql: `INSERT INTO data_rows (source_id, row_index, occurred_on, amount, label, payload_json)
+          VALUES (?, ?, ?, ?, ?, ?)`,
+    params: [sourceId, index, row.occurredOn, row.amount, row.label, JSON.stringify(row.payload)],
+  }))
+}
 
 type FieldDef = { key: string; label: string; required: boolean; keywords: string[] }
 
@@ -71,24 +88,42 @@ function detectDelimiter(line: string): string {
   return best
 }
 
-function parseLine(line: string, delimiter: string): string[] {
-  const values: string[] = []
-  let value = ''
+function parseMatrix(text: string, delimiter: string): string[][] {
+  const rows: string[][] = []
+  let row: string[] = []
+  let field = ''
   let inQuotes = false
-  for (let i = 0; i < line.length; i += 1) {
-    const char = line[i]
+
+  for (let i = 0; i < text.length; i += 1) {
+    const char = text[i]
     if (char === '"') {
-      if (inQuotes && line[i + 1] === '"') {
-        value += '"'
+      if (inQuotes && text[i + 1] === '"') {
+        field += '"'
         i += 1
-      } else inQuotes = !inQuotes
-    } else if (char === delimiter && !inQuotes) {
-      values.push(value.trim())
-      value = ''
-    } else value += char
+      } else {
+        inQuotes = !inQuotes
+      }
+      continue
+    }
+    if (char === delimiter && !inQuotes) {
+      row.push(field.trim())
+      field = ''
+      continue
+    }
+    if ((char === '\n' || char === '\r') && !inQuotes) {
+      if (char === '\r' && text[i + 1] === '\n') i += 1
+      row.push(field.trim())
+      field = ''
+      if (row.some((cell) => cell.length > 0)) rows.push(row)
+      row = []
+      continue
+    }
+    field += char
   }
-  values.push(value.trim())
-  return values
+
+  row.push(field.trim())
+  if (row.some((cell) => cell.length > 0)) rows.push(row)
+  return rows
 }
 
 function headerless(cells: string[]): boolean {
@@ -102,19 +137,26 @@ function headerless(cells: string[]): boolean {
 }
 
 export function parseCsv(text: string): { columns: string[]; rows: Record<string, string>[] } {
-  const lines = text.replace(/^\uFEFF/, '').split(/\r?\n/).map((line) => line.trim()).filter(Boolean)
-  if (lines.length < 1) throw new Error('ไฟล์ CSV ว่างเปล่า')
-  const delimiter = detectDelimiter(lines[0])
-  const firstCells = parseLine(lines[0], delimiter)
+  const clean = text.replace(/^\uFEFF/, '')
+  const firstLine = clean.split(/\r?\n/, 1)[0] ?? ''
+  if (!firstLine.trim()) throw new Error('ไฟล์ CSV ว่างเปล่า')
+  const delimiter = detectDelimiter(firstLine)
+  const matrix = parseMatrix(clean, delimiter)
+  if (matrix.length === 0) throw new Error('ไฟล์ CSV ว่างเปล่า')
+
+  const firstCells = matrix[0]
   const hasHeader = !headerless(firstCells)
-  const columns = hasHeader ? firstCells.map((cell, index) => cell || `คอลัมน์ ${index + 1}`) : firstCells.map((_, index) => `คอลัมน์ ${index + 1}`)
-  const dataLines = hasHeader ? lines.slice(1) : lines
+  const seen = new Map<string, number>()
+  const columns = firstCells.map((cell, index) => {
+    const base = (hasHeader ? cell : '') || `คอลัมน์ ${index + 1}`
+    const count = (seen.get(base) ?? 0) + 1
+    seen.set(base, count)
+    return count > 1 ? `${base}_${count}` : base
+  })
+  const dataRows = hasHeader ? matrix.slice(1) : matrix
   return {
     columns,
-    rows: dataLines.map((line) => {
-      const cells = parseLine(line, delimiter)
-      return Object.fromEntries(columns.map((column, index) => [column, cells[index] ?? '']))
-    }),
+    rows: dataRows.map((cells) => Object.fromEntries(columns.map((column, index) => [column, cells[index] ?? '']))),
   }
 }
 
@@ -235,38 +277,90 @@ type PreviewRecord = {
   file_name: string
   file_size: number
   columns_json: string
-  rows_json: string
   total_rows: number
   valid_rows: number
   duplicate_rows: number
   error_rows: number
 }
 
+async function cleanupExpiredPreviews() {
+  const now = nowIso()
+  await db.query(
+    'DELETE FROM import_preview_rows WHERE preview_id IN (SELECT id FROM import_previews WHERE expires_at <= ?)',
+  ).run(now)
+  await db.query('DELETE FROM import_previews WHERE expires_at <= ?').run(now)
+}
+
+async function readPreviewRows(previewId: string): Promise<Record<string, string>[]> {
+  const rows = await db
+    .query<{ payload_json: string }>('SELECT payload_json FROM import_preview_rows WHERE preview_id = ? ORDER BY row_index ASC')
+    .all(previewId)
+  return rows.map((row) => JSON.parse(row.payload_json) as Record<string, string>)
+}
+
 export async function createPreview(userId: string, file: File, requestedType: DataType): Promise<ImportPreview & { previewId: string; classification: ReturnType<typeof classifyCsv> }> {
+  const config = getRuntimeConfig()
   if (!file.name.toLowerCase().endsWith('.csv')) throw new Error('รองรับเฉพาะไฟล์ CSV')
-  if (file.size > 10 * 1024 * 1024) throw new Error('ขนาดไฟล์ต้องไม่เกิน 10 MB')
+  if (file.size > config.maxImportBytes) {
+    throw new Error(`ขนาดไฟล์ต้องไม่เกิน ${Math.round(config.maxImportBytes / 1024 / 1024)} MB`)
+  }
   const text = await file.text()
   const parsed = parseCsv(text)
   if (parsed.rows.length === 0) throw new Error('ไฟล์ CSV ต้องมีหัวตารางและข้อมูลอย่างน้อย 1 แถว')
+  if (parsed.columns.length > 200) throw new Error('ไฟล์มีคอลัมน์มากเกินไป (สูงสุด 200 คอลัมน์)')
+  if (parsed.columns.some((column) => column.length > 200)) throw new Error('ชื่อคอลัมน์ยาวเกินไป')
+  if (parsed.rows.length > config.maxImportRows) {
+    throw new Error(`ไฟล์มีแถวมากเกินไป (สูงสุด ${config.maxImportRows} แถว)`)
+  }
+
+  let payloadBytes = 0
+  const encoder = new TextEncoder()
+  for (const [index, row] of parsed.rows.entries()) {
+    const payloadJson = JSON.stringify(row)
+    payloadBytes += encoder.encode(payloadJson).length
+    if (payloadJson.length > 60_000) throw new Error(`แถวที่ ${index + 2} มีข้อมูลยาวเกินไป`)
+  }
+  if (payloadBytes > config.maxImportBytes) {
+    throw new Error(`ข้อมูลในไฟล์ใหญ่เกินไป (สูงสุด ${Math.round(config.maxImportBytes / 1024 / 1024)} MB)`)
+  }
+
   const classification = classifyCsv(file.name, parsed.columns, parsed.rows)
   const previewId = newId('preview')
-  db.query(
-    `INSERT INTO import_previews
-     (id, user_id, type, file_name, file_size, columns_json, rows_json, errors_json, total_rows, valid_rows, duplicate_rows, error_rows, created_at, expires_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, '[]', ?, ?, 0, 0, ?, ?)`,
-  ).run(
-    previewId,
-    userId,
-    requestedType,
-    file.name,
-    file.size,
-    JSON.stringify(parsed.columns),
-    JSON.stringify(parsed.rows),
-    parsed.rows.length,
-    parsed.rows.length,
-    nowIso(),
-    new Date(Date.now() + 30 * 60 * 1000).toISOString(),
-  )
+  const expiresAt = new Date(Date.now() + 30 * 60 * 1000).toISOString()
+  await cleanupExpiredPreviews()
+
+  const statements: SqlStatement[] = [
+    {
+      sql: `INSERT INTO import_previews
+            (id, user_id, type, file_name, file_size, columns_json, rows_json, errors_json, total_rows, valid_rows, duplicate_rows, error_rows, created_at, expires_at)
+            VALUES (?, ?, ?, ?, ?, ?, '[]', '[]', ?, ?, 0, 0, ?, ?)`,
+      params: [
+        previewId,
+        userId,
+        requestedType,
+        file.name,
+        file.size,
+        JSON.stringify(parsed.columns),
+        parsed.rows.length,
+        parsed.rows.length,
+        nowIso(),
+        expiresAt,
+      ],
+    },
+    ...parsed.rows.map((row, index) => ({
+      sql: 'INSERT INTO import_preview_rows (preview_id, row_index, payload_json) VALUES (?, ?, ?)',
+      params: [previewId, index, JSON.stringify(row)],
+    })),
+  ]
+
+  try {
+    await batchInChunks(statements, 50)
+  } catch (error) {
+    await db.query('DELETE FROM import_preview_rows WHERE preview_id = ?').run(previewId).catch(() => {})
+    await db.query('DELETE FROM import_previews WHERE id = ?').run(previewId).catch(() => {})
+    throw error
+  }
+
   return {
     previewId,
     classification,
@@ -283,19 +377,19 @@ export async function createPreview(userId: string, file: File, requestedType: D
   }
 }
 
-function getPreview(userId: string, previewId: string): PreviewRecord | null {
-  const record = db
-    .query('SELECT * FROM import_previews WHERE id = ? AND user_id = ? AND expires_at > ?')
-    .get(previewId, userId, nowIso()) as PreviewRecord | null
-  return record ?? null
+async function getPreview(userId: string, previewId: string): Promise<PreviewRecord | null> {
+  await cleanupExpiredPreviews()
+  return db
+    .query<PreviewRecord>('SELECT * FROM import_previews WHERE id = ? AND user_id = ? AND expires_at > ?')
+    .get(previewId, userId, nowIso())
 }
 
-export function validatePreview(userId: string, previewId: string, mapping: Record<string, string>): ImportPreview {
-  const record = getPreview(userId, previewId)
+export async function validatePreview(userId: string, previewId: string, mapping: Record<string, string>): Promise<ImportPreview> {
+  const record = await getPreview(userId, previewId)
   if (!record) throw new Error('ไม่พบ preview หรือหมดอายุแล้ว')
-  const rows = JSON.parse(record.rows_json) as Record<string, string>[]
+  const rows = await readPreviewRows(record.id)
   const validated = validateRows(record.type, rows, mapping)
-  db.query(
+  await db.query(
     'UPDATE import_previews SET errors_json = ?, valid_rows = ?, duplicate_rows = ?, error_rows = ? WHERE id = ?',
   ).run(JSON.stringify(validated.errors), validated.validRows, validated.duplicateRows, validated.errors.length, previewId)
   return {
@@ -313,10 +407,10 @@ export function validatePreview(userId: string, previewId: string, mapping: Reco
   }
 }
 
-export function commitPreview(userId: string, previewId: string, mapping: Record<string, string>) {
-  const record = getPreview(userId, previewId)
+export async function commitPreview(userId: string, previewId: string, mapping: Record<string, string>, industryId?: string | null) {
+  const record = await getPreview(userId, previewId)
   if (!record) throw new Error('ไม่พบ preview หรือหมดอายุแล้ว')
-  const rows = JSON.parse(record.rows_json) as Record<string, string>[]
+  const rows = await readPreviewRows(record.id)
   const validated = validateRows(record.type, rows, mapping)
   if (validated.normalized.length === 0) throw new Error('ไม่มีแถวที่พร้อมนำเข้า')
 
@@ -327,15 +421,51 @@ export function commitPreview(userId: string, previewId: string, mapping: Record
   const month = new Intl.DateTimeFormat('th-TH', { month: 'short', year: 'numeric' }).format(now)
   const period = `ม.ค. – ${month}`
   const name = fileBase ? `${typeLabels[record.type]} · ${fileBase}` : typeLabels[record.type]
-  db.transaction(() => {
-    db.query(
-      `INSERT INTO data_sources
-       (id, user_id, name, type, type_label, row_count, quality, period, file_name, is_demo, industry_id, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NULL, ?, ?)`,
-    ).run(sourceId, userId, name, record.type, typeLabels[record.type], validated.normalized.length, quality, period, record.file_name, now.toISOString(), now.toISOString())
-    insertImportedRows(sourceId, validated.normalized)
-    db.query('DELETE FROM import_previews WHERE id = ?').run(previewId)
-  })()
+  const business = await db.query<{ type: string }>('SELECT type FROM businesses WHERE user_id = ?').get(userId)
+  const requestedIndustry = industryId && Object.hasOwn(INDUSTRY_PROFILES, industryId)
+    ? (industryId as IndustryId)
+    : null
+  const classification = requestedIndustry
+    ? { id: requestedIndustry, confidence: 1 }
+    : classifySourceText(
+        name,
+        record.file_name,
+        record.type,
+        validated.normalized.map((row) => JSON.stringify(row.payload)),
+        business?.type,
+      )
+  const statements: SqlStatement[] = [
+    {
+      sql: `INSERT INTO data_sources
+            (id, user_id, name, type, type_label, row_count, quality, period, file_name, is_demo, industry_id, industry_confidence, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?)`,
+      params: [
+        sourceId,
+        userId,
+        name,
+        record.type,
+        typeLabels[record.type],
+        validated.normalized.length,
+        quality,
+        period,
+        record.file_name,
+        classification.id,
+        classification.confidence,
+        now.toISOString(),
+        now.toISOString(),
+      ],
+    },
+    ...importedRowStatements(sourceId, validated.normalized),
+    { sql: 'DELETE FROM import_preview_rows WHERE preview_id = ?', params: [previewId] },
+    { sql: 'DELETE FROM import_previews WHERE id = ?', params: [previewId] },
+  ]
+  try {
+    await batchInChunks(statements, 40)
+  } catch (error) {
+    await db.query('DELETE FROM data_rows WHERE source_id = ?').run(sourceId).catch(() => {})
+    await db.query('DELETE FROM data_sources WHERE id = ? AND user_id = ?').run(sourceId, userId).catch(() => {})
+    throw error
+  }
   return {
     id: sourceId,
     name,
@@ -345,6 +475,8 @@ export function commitPreview(userId: string, previewId: string, mapping: Record
     quality,
     period,
     fileName: record.file_name,
+    industryId: classification.id ?? undefined,
+    industryConfidence: classification.confidence,
     updatedAt: now.toISOString(),
   }
 }

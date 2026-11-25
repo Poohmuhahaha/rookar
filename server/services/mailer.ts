@@ -2,7 +2,8 @@ import { env } from '../env'
 
 export async function sendPasswordResetEmail(to: string, resetUrl: string): Promise<{ delivered: boolean }> {
   if (!env.resendApiKey) {
-    console.log(`[mail:dev] password reset for ${to}: ${resetUrl}`)
+    if (env.allowDevReset) console.log(`[mail:dev] password reset for ${to}: ${resetUrl}`)
+    else console.warn('[mail] RESEND_API_KEY is not configured; password reset email was not sent')
     return { delivered: false }
   }
 

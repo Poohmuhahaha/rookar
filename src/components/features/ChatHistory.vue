@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { Check, Image as ImageIcon, PanelRightClose, Plus, Search } from '@lucide/vue'
+import { Image as ImageIcon, PanelRightClose, Plus, Search, Trash2 } from '@lucide/vue'
 import LogoMark from '@/components/brand/LogoMark.vue'
+import AgentAvatar from '@/components/ui/AgentAvatar.vue'
+import { conversationAgents } from '@/lib/conversationAgents'
 import { cn } from '@/lib/cn'
 import { getSession } from '@/lib/mockApi'
 import { shortTimeAgo } from '@/lib/format'
@@ -21,6 +23,7 @@ const emit = defineEmits<{
   select: [conversation: Conversation]
   newChat: []
   close: []
+  delete: [conversation: Conversation]
 }>()
 
 const session = getSession()
@@ -41,6 +44,10 @@ const filtered = computed(() => {
 const emptyMessage = computed(() =>
   search.value.trim() ? 'ไม่พบบทสนทนาที่ค้นหา' : 'ยังไม่มีบทสนทนา',
 )
+
+function agentsFor(conversation: Conversation) {
+  return conversationAgents(conversation)
+}
 </script>
 
 <template>
@@ -92,32 +99,18 @@ const emptyMessage = computed(() =>
       </p>
 
       <ul v-else class="space-y-1">
-        <li v-for="conversation in filtered" :key="conversation.id">
+        <li v-for="conversation in filtered" :key="conversation.id" class="group/conversation relative">
           <button
             type="button"
             :class="
               cn(
-                'group flex w-full items-start gap-2.5 rounded-2xl p-2.5 text-left transition',
+                'flex w-full items-start gap-2.5 rounded-2xl p-2.5 pr-9 text-left transition',
                 activeId === conversation.id ? 'bg-white text-ink' : 'text-ink-soft hover:bg-white/60 hover:text-ink',
               )
             "
             :aria-current="activeId === conversation.id ? 'true' : undefined"
             @click="emit('select', conversation)"
           >
-            <span
-              :class="
-                cn(
-                  'mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-[4px] transition-colors',
-                  activeId === conversation.id
-                    ? 'bg-brand-600'
-                    : 'bg-black/10 group-hover:bg-black/20',
-                )
-              "
-              aria-hidden="true"
-            >
-              <Check v-if="activeId === conversation.id" class="h-3 w-3 text-white" :stroke-width="3" />
-            </span>
-
             <span class="min-w-0 flex-1">
               <span class="block truncate text-[12.5px] font-semibold text-ink">{{ conversation.title }}</span>
               <span class="mt-0.5 block truncate text-[11px] font-normal text-muted">
@@ -138,8 +131,26 @@ const emptyMessage = computed(() =>
               </div>
 
               <span class="mt-2.5 flex items-center justify-between gap-2">
-                <span class="flex items-center -space-x-1.5" aria-hidden="true">
-                  <template v-if="conversation.avatars && conversation.avatars.length">
+                <span class="flex items-center -space-x-1.5">
+                  <template v-if="agentsFor(conversation).length">
+                    <AgentAvatar
+                      v-for="agent in agentsFor(conversation).slice(0, 4)"
+                      :key="agent.name"
+                      :name="agent.name"
+                      :color="agent.color"
+                      size="sm"
+                    />
+                    <span
+                      v-if="agentsFor(conversation).length > 4"
+                      class="flex h-7 w-7 items-center justify-center rounded-full bg-neutral-800 text-[9.5px] font-bold text-white ring-2 ring-white"
+                    >
+                      +{{ agentsFor(conversation).length - 4 }}
+                    </span>
+                    <span class="flex h-7 w-7 items-center justify-center overflow-hidden rounded-full bg-neutral-200 ring-2 ring-white">
+                      <img :src="avatarUrl" alt="User" class="h-full w-full object-cover" />
+                    </span>
+                  </template>
+                  <template v-else-if="conversation.avatars && conversation.avatars.length">
                     <span
                       v-for="(av, idx) in conversation.avatars"
                       :key="idx"
@@ -165,6 +176,15 @@ const emptyMessage = computed(() =>
                 </span>
               </span>
             </span>
+          </button>
+          <button
+            type="button"
+            class="absolute right-1.5 top-1.5 inline-flex h-7 w-7 items-center justify-center rounded-lg text-faint opacity-0 transition hover:bg-danger-soft hover:text-danger focus-visible:opacity-100 group-hover/conversation:opacity-100"
+            :aria-label="`ลบแชท ${conversation.title}`"
+            title="ลบแชท"
+            @click.stop="emit('delete', conversation)"
+          >
+            <Trash2 class="h-3.5 w-3.5" aria-hidden="true" />
           </button>
         </li>
       </ul>

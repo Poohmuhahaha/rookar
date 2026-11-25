@@ -3,6 +3,7 @@ export type Role = 'owner' | 'manager' | 'staff' | 'admin'
 export interface User {
   id: string
   name: string
+  username?: string | null
   email: string
   role: Role
   initials: string
@@ -42,6 +43,7 @@ export interface DataSource {
   fileName: string
   isDemo?: boolean
   industryId?: string
+  industryConfidence?: number
 }
 
 export interface KpiPoint {
@@ -61,6 +63,9 @@ export interface CostSlice {
 export interface MacroIndicatorValue {
   value: number
   year: string
+  source?: string
+  periodLabel?: string
+  projected?: boolean
 }
 
 export type MacroIndicatorKey =
@@ -68,6 +73,8 @@ export type MacroIndicatorKey =
   | 'householdConsumptionGrowth'
   | 'cpiInflation'
   | 'unemploymentRate'
+  | 'governmentDebt'
+  | 'currentAccountBalance'
 
 export interface SectorBenchmark {
   countryName: string
@@ -80,8 +87,60 @@ export interface SectorBenchmark {
   stale?: boolean
 }
 
+export interface IndustryEconomicsIndicator {
+  key: string
+  label: string
+  labelEn: string
+  note: string
+  noteEn: string
+  useCase: string
+  useCaseEn: string
+  value: number
+  previousValue: number | null
+  delta: number | null
+  history: { year: string; value: number }[]
+  unit: 'percent' | 'years' | 'score' | 'per_1000' | 'per_million' | 'kg_oe'
+  year: string
+  periodLabel: string
+}
+
+export interface IndustryEconomics {
+  industryId: string
+  label: string
+  labelEn: string
+  indicators: IndustryEconomicsIndicator[]
+  source: string
+  sourceUrl: string
+  lastUpdated: string
+  stale?: boolean
+}
+
+export interface DashboardIndustryMeta {
+  id: string
+  label: string
+  shortLabel: string
+  accent: string
+  sourceCount: number
+  realSourceCount: number
+  demoSourceCount: number
+  coverageMonths: number
+  totalMonths: number
+  confidence: number
+  unmatchedSources: number
+}
+
+export interface DashboardSegment {
+  key: string
+  label: string
+  value: number
+  share: number
+}
+
+
 export interface DashboardSummary {
   rangeLabel: string
+  hasSales?: boolean
+  hasCost?: boolean
   revenue: number
   profit: number
   cost: number
@@ -96,6 +155,9 @@ export interface DashboardSummary {
   costSpark: number[]
   marginSpark: number[]
   costBreakdown: CostSlice[]
+  industry?: DashboardIndustryMeta
+  segments?: DashboardSegment[]
+  costSegments?: DashboardSegment[]
   insight: {
     title: string
     body: string
@@ -149,7 +211,11 @@ export interface ChatMessage {
   feedback?: 'up' | 'down' | null
   createdAt: string
   error?: boolean
+  errorMessage?: string
   specialistRole?: 'finance' | 'market' | 'strategy' | 'planning' | 'general'
+  agentNames?: string[]
+  answeredBy?: string
+  toolEvents?: AiToolEvent[]
   actionPlan?: { id: string; text: string; done: boolean }[]
 }
 
@@ -163,15 +229,25 @@ export interface Conversation {
   group: 'วันนี้' | 'เมื่อวาน' | 'ก่อนหน้านี้'
   thumbnail?: string
   avatars?: string[]
+  agentNames?: string[]
   specialistRole?: SpecialistType
   messages: ChatMessage[]
 }
 
+export interface AiToolEvent {
+  id?: string
+  name?: string
+  label?: string
+  status?: 'running' | 'done' | 'error'
+  summary?: string
+}
+
 export interface AiStreamEvent {
-  type: 'token' | 'citation' | 'done' | 'error'
+  type: 'token' | 'citation' | 'done' | 'error' | 'tool_start' | 'tool_result'
   value?: string
   citation?: Citation
   message?: string
+  tool?: AiToolEvent
 }
 
 export interface DashboardRange {

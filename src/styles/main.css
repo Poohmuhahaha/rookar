@@ -3,6 +3,13 @@
 @theme {
   --font-sans: "Inter", "Prompt", ui-sans-serif, system-ui, sans-serif;
 
+  --breakpoint-sm: 40rem;
+  --breakpoint-md: 48rem;
+  --breakpoint-lg: 64rem;
+  --breakpoint-xl: 80rem;
+  --breakpoint-2xl: 96rem;
+  --breakpoint-3xl: 112.5rem;
+
   --color-brand-50: #f4f4f5;
   --color-brand-100: #e4e4e7;
   --color-brand-200: #d4d4d8;
@@ -420,6 +427,140 @@
   background: var(--color-surface-table);
 }
 
+/* Landing pillar cards */
+.pillar-card {
+  position: relative;
+  overflow: hidden;
+  border-radius: 2rem;
+  background:
+    radial-gradient(120% 130% at 85% 0%, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0) 48%),
+    linear-gradient(145deg, #18181b 0%, #09090b 58%, #000000 100%);
+  color: #ffffff;
+}
+
+.pillar-stage {
+  position: relative;
+  display: grid;
+  width: 100%;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+  border-radius: 0;
+  background: #000000;
+  isolation: isolate;
+}
+
+.pillar-stage .pillar-card {
+  border-radius: 0;
+}
+
+.pillar-slide {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  grid-area: 1 / 1;
+  height: 100vh;
+  min-height: 0;
+  transform: translateY(100%);
+  transition: transform 1.2s cubic-bezier(0.65, 0, 0.35, 1);
+  will-change: transform;
+  pointer-events: none;
+}
+
+@supports (height: 100dvh) {
+  .pillar-slide {
+    height: 100dvh;
+  }
+}
+
+.pillar-slide.is-active {
+  transform: translateY(0);
+  z-index: 20;
+  pointer-events: auto;
+}
+
+.pillar-slide.is-under {
+  transform: translateY(0);
+  z-index: 10;
+  pointer-events: none;
+}
+
+.pillar-slide.is-above {
+  transform: translateY(-100%);
+  z-index: 0;
+  pointer-events: none;
+}
+
+.pillar-slide.is-below {
+  transform: translateY(100%);
+  z-index: 0;
+  pointer-events: none;
+}
+
+.pillar-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.055) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.055) 1px, transparent 1px);
+  background-size: 44px 44px;
+  mask-image: radial-gradient(120% 110% at 78% 8%, #000000 0%, transparent 68%);
+  -webkit-mask-image: radial-gradient(120% 110% at 78% 8%, #000000 0%, transparent 68%);
+  pointer-events: none;
+}
+
+.pillar-card::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    420px circle at var(--spot-x, 78%) var(--spot-y, 8%),
+    rgba(255, 255, 255, 0.14),
+    transparent 66%
+  );
+  opacity: 0;
+  transition: opacity 0.25s ease;
+  pointer-events: none;
+}
+
+.pillar-card:hover::after {
+  opacity: 1;
+}
+
+.pillar-orb {
+  position: absolute;
+  right: -4rem;
+  top: -5rem;
+  width: 16rem;
+  height: 16rem;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.06);
+  filter: blur(48px);
+  pointer-events: none;
+  animation: pillar-float 9s ease-in-out infinite alternate;
+}
+
+@keyframes pillar-float {
+  from {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  to {
+    transform: translate3d(-1.5rem, 1rem, 0) scale(1.12);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pillar-slide {
+    transition: none;
+  }
+
+  .pillar-orb {
+    animation: none;
+  }
+}
+
 /* Global Zero Stroke & Zero Shadow Override per User Request */
 *,
 *::before,
@@ -515,7 +656,7 @@
 
 @media (min-width: 1440px) {
   .kpi-header {
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
   }
 
   .kpi-trend {

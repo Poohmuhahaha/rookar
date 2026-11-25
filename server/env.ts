@@ -1,15 +1,9 @@
-export const env = {
-  port: Number(process.env.PORT ?? 8787),
-  databaseUrl: process.env.DATABASE_URL ?? './data/rookar-dev.sqlite',
-  sessionCookie: 'rookar_session',
-  sessionTtlMs: 1000 * 60 * 60 * 24 * 30,
-  nodeEnv: process.env.NODE_ENV ?? 'development',
-  appUrl: process.env.APP_URL ?? 'http://localhost:8090',
-  aiProvider: (process.env.AI_PROVIDER ?? (process.env.OPENAI_API_KEY ? 'openai' : 'mock')).toLowerCase(),
-  openaiApiKey: process.env.OPENAI_API_KEY ?? '',
-  openaiModel: process.env.OPENAI_MODEL ?? 'gpt-4.1-mini',
-  openaiBaseUrl: process.env.OPENAI_BASE_URL ?? 'https://api.openai.com/v1',
-  resendApiKey: process.env.RESEND_API_KEY ?? '',
-  mailFrom: process.env.MAIL_FROM ?? 'ROOKAR <no-reply@rookar.co>',
-  resetTokenTtlMs: 1000 * 60 * 30,
-}
+import { getRuntimeConfig, type RuntimeConfig } from './runtime'
+
+export type { RuntimeConfig }
+
+export const env = new Proxy({} as RuntimeConfig, {
+  get(_target, property: string | symbol) {
+    return getRuntimeConfig()[property as keyof RuntimeConfig]
+  },
+})

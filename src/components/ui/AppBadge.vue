@@ -23,7 +23,7 @@ const tones: Record<Tone, string> = {
 
 const classes = computed(() =>
   cn(
-    'inline-flex h-[22px] w-28 items-center justify-center rounded-full px-2.5 text-center text-[11px] font-semibold',
+    'inline-flex h-[22px] min-w-28 items-center justify-center whitespace-nowrap rounded-full px-3 text-center text-[11px] font-semibold',
     tones[props.tone],
   ),
 )

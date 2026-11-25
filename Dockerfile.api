@@ -9,11 +9,13 @@ RUN --mount=type=cache,target=/root/.bun/install/cache bun install --frozen-lock
 COPY src ./src
 COPY server ./server
 
-RUN mkdir -p /app/data
+RUN mkdir -p /app/data && chown -R bun:bun /app
+
+USER bun
 
 ENV PORT=8787
 ENV DATABASE_URL=/app/data/rookar-dev.sqlite
-ENV NODE_ENV=development
+ENV NODE_ENV=production
 
 EXPOSE 8787
 

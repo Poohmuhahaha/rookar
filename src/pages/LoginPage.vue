@@ -7,6 +7,7 @@ import AppButton from '@/components/ui/AppButton.vue'
 import CheckboxField from '@/components/ui/CheckboxField.vue'
 import TextField from '@/components/ui/TextField.vue'
 import { login } from '@/lib/mockApi'
+import { t, translateServerError } from '@/lib/i18n'
 import { useToast } from '@/lib/toast'
 
 const router = useRouter()
@@ -15,20 +16,31 @@ const toast = useToast()
 const form = reactive({
   email: '',
   password: '',
+  confirmPassword: '',
   remember: true,
 })
-const errors = reactive<{ email?: string; password?: string; general?: string }>({})
+const errors = reactive<{
+  email?: string
+  password?: string
+  confirmPassword?: string
+  general?: string
+}>({})
 const loading = ref(false)
 
 function validate() {
   errors.email = undefined
   errors.password = undefined
+  errors.confirmPassword = undefined
   errors.general = undefined
-  if (!form.email.trim()) errors.email = 'กรุณากรอกอีเมล'
-  else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) errors.email = 'รูปแบบอีเมลไม่ถูกต้อง'
-  if (!form.password) errors.password = 'กรุณากรอกรหัสผ่าน'
-  else if (form.password.length < 8) errors.password = 'รหัสผ่านต้องมีอย่างน้อย 8 ตัวอักษร'
-  return !errors.email && !errors.password
+  if (!form.email.trim()) errors.email = t('err.emailRequired')
+  else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) errors.email = t('err.emailInvalid')
+  if (!form.password) errors.password = t('err.passwordRequired')
+  else if (form.password.length < 8) errors.password = t('err.passwordMin')
+  if (!form.confirmPassword) errors.confirmPassword = t('err.confirmRequired')
+  else if (form.confirmPassword !== form.password) {
+    errors.confirmPassword = t('err.confirmMismatch')
+  }
+  return !errors.email && !errors.password && !errors.confirmPassword
 }
 
 async function handleSubmit() {
@@ -36,10 +48,11 @@ async function handleSubmit() {
   loading.value = true
   try {
     const session = await login(form.email.trim(), form.password)
-    toast.success('เข้าสู่ระบบสำเร็จ', `ยินดีต้อนรับกลับ ${session.user.name}`)
+    toast.success(t('toast.loginTitle'), t('toast.welcome', { name: session.user.name }))
     await router.navigate({ to: session.onboardingComplete ? '/app/assistant' : '/setup' })
   } catch (error) {
-    errors.general = error instanceof Error ? error.message : 'เข้าสู่ระบบไม่สำเร็จ กรุณาลองใหม่'
+    errors.general =
+      error instanceof Error ? translateServerError(error.message, 'err.genericLogin') : t('err.genericLogin')
   } finally {
     loading.value = false
   }
@@ -51,39 +64,48 @@ async function handleSubmit() {
   <AuthLayout>
     <div>
       <h1 class="text-[28px] font-semibold leading-tight tracking-[-0.025em] text-ink">
-        ยินดีต้อนรับกลับ
+        {{ t('login.title') }}
       </h1>
       <p class="mt-2 text-[13px] leading-relaxed text-muted">
-        เข้าสู่ระบบเพื่อดูภาพรวมธุรกิจและคุยกับ AI ของคุณ
+        {{ t('login.subtitle') }}
       </p>
 
       <form class="mt-7 space-y-4" novalidate @submit.prevent="handleSubmit">
         <TextField
           v-model="form.email"
-          label="อีเมล"
+          :label="t('common.email')"
           type="email"
           autocomplete="email"
-          placeholder="you@company.com"
+          :placeholder="t('common.emailPlaceholder')"
           size="lg"
           :error="errors.email"
         />
         <TextField
           v-model="form.password"
-          label="รหัสผ่าน"
+          :label="t('common.password')"
           type="password"
           autocomplete="current-password"
-          placeholder="อย่างน้อย 8 ตัวอักษร"
+          :placeholder="t('common.passwordPlaceholder')"
           size="lg"
           :error="errors.password"
         />
+        <TextField
+          v-model="form.confirmPassword"
+          :label="t('login.confirmLabel')"
+          type="password"
+          autocomplete="current-password"
+          :placeholder="t('login.confirmPlaceholder')"
+          size="lg"
+          :error="errors.confirmPassword"
+        />
 
         <div class="flex items-center justify-between gap-3 pt-0.5">
-          <CheckboxField v-model="form.remember" label="จดจำฉันไว้" />
+          <CheckboxField v-model="form.remember" :label="t('login.remember')" />
           <Link
             to="/forgot-password"
             class="shrink-0 text-[13px] font-medium text-brand-700 underline-offset-4 transition hover:text-brand-900 hover:underline"
           >
-            ลืมรหัสผ่าน?
+            {{ t('login.forgot') }}
           </Link>
         </div>
 
@@ -97,7 +119,7 @@ async function handleSubmit() {
         </div>
 
         <AppButton type="submit" size="lg" block :loading="loading">
-          เข้าสู่ระบบ
+          {{ t('login.submit') }}
           <template #right>
             <ArrowRight v-if="!loading" class="h-4 w-4" aria-hidden="true" />
           </template>
@@ -105,12 +127,12 @@ async function handleSubmit() {
       </form>
 
       <p class="mt-7 text-center text-[13px] text-muted">
-        ยังไม่มีบัญชี?
+        {{ t('login.noAccount') }}
         <Link
           to="/signup"
           class="font-medium text-brand-700 underline-offset-4 transition hover:text-brand-900 hover:underline"
         >
-          สมัครใช้งานฟรี
+          {{ t('login.signupLink') }}
         </Link>
       </p>
     </div>

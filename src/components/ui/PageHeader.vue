@@ -16,6 +16,7 @@ defineProps<{
   >
     <div class="min-w-0">
       <div class="flex items-center gap-1.5">
+        <slot name="leading" />
         <h1 class="flex flex-wrap items-center gap-x-2 gap-y-1 text-[24px] font-semibold tracking-[-0.02em] text-ink">
           <template v-if="breadcrumb">
             <Link :to="breadcrumb.to" class="text-muted transition hover:text-ink">{{ breadcrumb.label }}</Link>

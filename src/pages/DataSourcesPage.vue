@@ -7,6 +7,7 @@ import PageHeader from '@/components/ui/PageHeader.vue'
 import AppButton from '@/components/ui/AppButton.vue'
 import AppBadge from '@/components/ui/AppBadge.vue'
 import AppModal from '@/components/ui/AppModal.vue'
+import IndustryPicker from '@/components/ui/IndustryPicker.vue'
 import {
   DropdownMenuContent,
   DropdownMenuItem,
@@ -15,7 +16,7 @@ import {
   DropdownMenuRoot,
   DropdownMenuTrigger,
 } from 'reka-ui'
-import { deleteSource, listSources, seedSampleSources } from '@/lib/mockApi'
+import { deleteSource, listSources, setSourceIndustry } from '@/lib/mockApi'
 import { formatNumber, timeAgo } from '@/lib/format'
 import { useToast } from '@/lib/toast'
 import { cn } from '@/lib/cn'
@@ -27,7 +28,7 @@ const queryClient = useQueryClient()
 const search = ref('')
 const typeFilter = ref<'all' | DataType>('all')
 const deleteTarget = ref<DataSource | null>(null)
-const seedLoading = ref(false)
+const assigningId = ref<string | null>(null)
 
 const { data: sources, isPending } = useQuery({
   queryKey: ['sources'],
@@ -126,18 +127,20 @@ async function confirmDelete() {
   await deleteMutation.mutateAsync(deleteTarget.value.id)
 }
 
-async function loadSample() {
-  if (seedLoading.value) return
-  seedLoading.value = true
+async function assignIndustry(source: DataSource, industryId: string | null) {
+  if ((source.industryId ?? null) === industryId || assigningId.value) return
+  assigningId.value = source.id
   try {
-    await seedSampleSources()
+    await setSourceIndustry(source.id, industryId)
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ['sources'] }),
       queryClient.invalidateQueries({ queryKey: ['dashboard'] }),
     ])
-    toast.success('เพิ่มข้อมูลตัวอย่างแล้ว')
+    toast.success(industryId ? 'อัปเดตอุตสาหกรรมแล้ว' : 'นำไฟล์ออกจากอุตสาหกรรมแล้ว')
+  } catch {
+    toast.error('อัปเดตอุตสาหกรรมไม่สำเร็จ', 'กรุณาลองใหม่อีกครั้ง')
   } finally {
-    seedLoading.value = false
+    assigningId.value = null
   }
 }
 
@@ -164,6 +167,16 @@ function downloadTemplate() {
     description="ทุกไฟล์ที่ ROOKAR ใช้วิเคราะห์อยู่ที่นี่ ตรวจสอบความครบถ้วนและอัปเดตได้ทุกเมื่อ"
   >
     <template #actions>
+      <div class="relative w-full sm:w-64">
+        <Search class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-faint" aria-hidden="true" />
+        <input
+          v-model="search"
+          type="search"
+          placeholder="ค้นหาไฟล์หรือชื่อข้อมูล…"
+          class="h-10 w-full rounded-full bg-surface pl-9 pr-3 text-[12.5px] text-ink placeholder:text-faint transition-colors focus:bg-neutral-200 focus:outline-none"
+          aria-label="ค้นหาแหล่งข้อมูล"
+        />
+      </div>
       <AppButton variant="secondary" @click="downloadTemplate">
         <template #left>
           <Download class="h-4 w-4" aria-hidden="true" />
@@ -173,94 +186,84 @@ function downloadTemplate() {
     </template>
   </PageHeader>
 
-  <dl class="mb-5 grid grid-cols-2 gap-3.5 sm:grid-cols-4">
-    <div class="card-fade p-4">
-      <div class="relative z-10 flex h-full flex-col justify-between">
-        <dt class="text-[11.5px] font-medium text-ink-soft">แหล่งข้อมูลทั้งหมด</dt>
-        <dd class="tabular mt-3 text-2xl font-bold tracking-tight text-ink">{{ sources?.length ?? 0 }}</dd>
-      </div>
+  <div class="grid gap-5 xl:grid-cols-[200px_minmax(0,1fr)]">
+      <form class="order-1 mb-3 flex flex-wrap items-center justify-start gap-2 sm:justify-end xl:col-start-2 xl:row-start-1 xl:mb-0" role="search" @submit.prevent>
+    <div class="flex items-center gap-2">
+    <DropdownMenuRoot>
+      <DropdownMenuTrigger as-child>
+        <button
+          type="button"
+          class="inline-flex h-10 items-center gap-2 rounded-full bg-ink px-4 text-[12px] font-semibold text-white transition hover:bg-black"
+          aria-label="กรองตามประเภทข้อมูล"
+        >
+          <ListFilter class="h-3.5 w-3.5 text-white/70" aria-hidden="true" />
+          {{ activeFilter.label }}
+          <span class="rounded-full bg-white/15 px-1.5 py-0.5 text-[10px] font-semibold text-white/80">
+            {{ activeFilter.count }}
+          </span>
+          <ChevronDown class="h-3.5 w-3.5 text-white/70" aria-hidden="true" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuPortal>
+        <DropdownMenuContent
+          align="end"
+          :side-offset="8"
+          class="z-[70] max-h-72 w-60 overflow-y-auto rounded-2xl bg-white p-1.5 shadow-[0_12px_36px_rgba(0,0,0,0.12)] ring-1 ring-black/[0.06] focus:outline-none"
+        >
+          <DropdownMenuLabel class="px-3 py-2 text-[10.5px] font-semibold uppercase tracking-wide text-muted">
+            กรองตามประเภท
+          </DropdownMenuLabel>
+          <DropdownMenuItem
+            v-for="filter in availableFilters"
+            :key="filter.value"
+            class="flex cursor-pointer select-none items-center gap-2 rounded-xl px-3 py-2.5 text-[12px] font-medium text-ink outline-none transition data-[highlighted]:bg-neutral-100"
+            @select="typeFilter = filter.value"
+          >
+            <span class="flex-1">{{ filter.label }}</span>
+            <span class="tabular text-[10.5px] text-muted">{{ filter.count }}</span>
+            <Check v-if="typeFilter === filter.value" class="h-4 w-4 shrink-0 text-ink" aria-hidden="true" />
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenuPortal>
+    </DropdownMenuRoot>
+    <AppButton size="sm" @click="router.navigate({ to: '/app/import' })">
+      <template #left>
+        <Plus class="h-3.5 w-3.5" aria-hidden="true" />
+      </template>
+      นำเข้าข้อมูล
+    </AppButton>
     </div>
-    <div class="card-fade p-4">
-      <div class="relative z-10 flex h-full flex-col justify-between">
-        <dt class="text-[11.5px] font-medium text-ink-soft">ข้อมูลรวม</dt>
-        <dd class="tabular mt-3 text-2xl font-bold tracking-tight text-ink">{{ formatNumber(totalRows) }} <span class="text-[11px] font-normal text-muted">แถว</span></dd>
-      </div>
-    </div>
-    <div class="card-fade p-4">
-      <div class="relative z-10 flex h-full flex-col justify-between">
-        <dt class="text-[11.5px] font-medium text-ink-soft">พร้อมใช้งาน</dt>
-        <dd class="tabular mt-3 text-2xl font-bold tracking-tight text-success">{{ completeCount }} <span class="text-[11px] font-normal text-muted">ชุด</span></dd>
-      </div>
-    </div>
-    <div class="card-fade p-4">
-      <div class="relative z-10 flex h-full flex-col justify-between">
-        <dt class="text-[11.5px] font-medium text-ink-soft">ต้องตรวจสอบ</dt>
-        <dd class="tabular mt-3 text-2xl font-bold tracking-tight" :class="attentionCount ? 'text-warning' : 'text-ink'">
-          {{ attentionCount }} <span class="text-[11px] font-normal text-muted">ชุด</span>
-        </dd>
-      </div>
-    </div>
-  </dl>
+  </form>
 
-  <section class="card-fade-static data-table-surface">
+    <dl class="order-2 grid grid-cols-2 gap-x-5 gap-y-5 rounded-[24px] bg-surface p-4 sm:grid-cols-4 sm:gap-x-0 sm:gap-y-0 sm:p-5 xl:col-start-1 xl:row-start-2 xl:grid-cols-1 xl:gap-y-0 xl:self-start">
+    <div class="relative flex flex-col justify-between sm:px-5 sm:first:pl-0 sm:last:pr-0 xl:px-0 xl:py-4 xl:first:pt-0 xl:last:pb-0">
+      <dt class="text-[11.5px] font-medium text-ink-soft">แหล่งข้อมูลทั้งหมด</dt>
+      <dd class="tabular mt-3 text-2xl font-bold tracking-tight text-ink xl:mt-1.5">{{ sources?.length ?? 0 }}</dd>
+    </div>
+    <div class="relative flex flex-col justify-between sm:px-5 xl:px-0 xl:py-4">
+      <span class="absolute left-0 top-1/2 hidden h-9 w-px -translate-y-1/2 bg-black/10 sm:block xl:hidden" aria-hidden="true" />
+      <span class="absolute inset-x-0 top-0 hidden h-px bg-black/10 xl:block" aria-hidden="true" />
+      <dt class="text-[11.5px] font-medium text-ink-soft">ข้อมูลรวม</dt>
+      <dd class="tabular mt-3 text-2xl font-bold tracking-tight text-ink xl:mt-1.5">{{ formatNumber(totalRows) }} <span class="text-[11px] font-normal text-muted">แถว</span></dd>
+    </div>
+    <div class="relative flex flex-col justify-between sm:px-5 xl:px-0 xl:py-4">
+      <span class="absolute left-0 top-1/2 hidden h-9 w-px -translate-y-1/2 bg-black/10 sm:block xl:hidden" aria-hidden="true" />
+      <span class="absolute inset-x-0 top-0 hidden h-px bg-black/10 xl:block" aria-hidden="true" />
+      <dt class="text-[11.5px] font-medium text-ink-soft">พร้อมใช้งาน</dt>
+      <dd class="tabular mt-3 text-2xl font-bold tracking-tight text-success xl:mt-1.5">{{ completeCount }} <span class="text-[11px] font-normal text-muted">ชุด</span></dd>
+    </div>
+    <div class="relative flex flex-col justify-between sm:px-5 sm:last:pr-0 xl:px-0 xl:py-4 xl:last:pb-0">
+      <span class="absolute left-0 top-1/2 hidden h-9 w-px -translate-y-1/2 bg-black/10 sm:block xl:hidden" aria-hidden="true" />
+      <span class="absolute inset-x-0 top-0 hidden h-px bg-black/10 xl:block" aria-hidden="true" />
+      <dt class="text-[11.5px] font-medium text-ink-soft">ต้องตรวจสอบ</dt>
+      <dd class="tabular mt-3 text-2xl font-bold tracking-tight xl:mt-1.5" :class="attentionCount ? 'text-warning' : 'text-ink'">
+        {{ attentionCount }} <span class="text-[11px] font-normal text-muted">ชุด</span>
+      </dd>
+    </div>
+    </dl>
+
+  <section class="order-3 min-w-0 card-fade-static xl:col-start-2 xl:row-start-2">
     <div class="relative z-10">
-      <form class="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between" role="search" @submit.prevent>
-        <div class="relative w-full sm:max-w-xs">
-          <Search class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-faint" aria-hidden="true" />
-          <input
-            v-model="search"
-            type="search"
-            placeholder="ค้นหาไฟล์หรือชื่อข้อมูล…"
-            class="h-10 w-full rounded-full bg-white pl-9 pr-3 text-[12.5px] text-ink placeholder:text-faint focus:outline-none"
-            aria-label="ค้นหาแหล่งข้อมูล"
-          />
-        </div>
-        <div class="flex items-center gap-2">
-        <DropdownMenuRoot>
-          <DropdownMenuTrigger as-child>
-            <button
-              type="button"
-              class="inline-flex h-10 items-center gap-2 rounded-full bg-ink px-4 text-[12px] font-semibold text-white transition hover:bg-black"
-              aria-label="กรองตามประเภทข้อมูล"
-            >
-              <ListFilter class="h-3.5 w-3.5 text-white/70" aria-hidden="true" />
-              {{ activeFilter.label }}
-              <span class="rounded-full bg-white/15 px-1.5 py-0.5 text-[10px] font-semibold text-white/80">
-                {{ activeFilter.count }}
-              </span>
-              <ChevronDown class="h-3.5 w-3.5 text-white/70" aria-hidden="true" />
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuPortal>
-            <DropdownMenuContent
-              align="end"
-              :side-offset="8"
-              class="z-[70] max-h-72 w-60 overflow-y-auto rounded-2xl bg-white p-1.5 shadow-[0_12px_36px_rgba(0,0,0,0.12)] ring-1 ring-black/[0.06] focus:outline-none"
-            >
-              <DropdownMenuLabel class="px-3 py-2 text-[10.5px] font-semibold uppercase tracking-wide text-muted">
-                กรองตามประเภท
-              </DropdownMenuLabel>
-              <DropdownMenuItem
-                v-for="filter in availableFilters"
-                :key="filter.value"
-                class="flex cursor-pointer select-none items-center gap-2 rounded-xl px-3 py-2.5 text-[12px] font-medium text-ink outline-none transition data-[highlighted]:bg-neutral-100"
-                @select="typeFilter = filter.value"
-              >
-                <span class="flex-1">{{ filter.label }}</span>
-                <span class="tabular text-[10.5px] text-muted">{{ filter.count }}</span>
-                <Check v-if="typeFilter === filter.value" class="h-4 w-4 shrink-0 text-ink" aria-hidden="true" />
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenuPortal>
-        </DropdownMenuRoot>
-        <AppButton size="sm" @click="router.navigate({ to: '/app/import' })">
-          <template #left>
-            <Plus class="h-3.5 w-3.5" aria-hidden="true" />
-          </template>
-          นำเข้าข้อมูล
-        </AppButton>
-        </div>
-      </form>
 
     <div v-if="isPending" class="p-4">
       <div v-for="index in 4" :key="index" class="skeleton mb-2 h-14 rounded-2xl" />
@@ -279,9 +282,6 @@ function downloadTemplate() {
           </template>
           นำเข้าข้อมูล
         </AppButton>
-        <AppButton variant="secondary" size="sm" :loading="seedLoading" @click="loadSample">
-          ใช้ข้อมูลตัวอย่าง
-        </AppButton>
       </div>
     </div>
 
@@ -297,56 +297,64 @@ function downloadTemplate() {
       </button>
     </div>
 
-    <div v-else class="hidden md:block">
-      <table class="w-full text-left">
+    <div v-else class="hidden overflow-x-auto md:block">
+      <table class="w-full min-w-[720px] table-fixed text-left">
         <caption class="sr-only">รายการแหล่งข้อมูลทางธุรกิจ</caption>
         <thead>
-          <tr class="bg-canvas text-[11px] font-medium text-muted">
-            <th class="px-4 py-3 font-medium">แหล่งข้อมูล</th>
-            <th class="px-3 py-3 font-medium">ประเภท</th>
-            <th class="px-3 py-3 text-right font-medium">จำนวนแถว</th>
-            <th class="px-3 py-3 font-medium">คุณภาพ</th>
-            <th class="px-3 py-3 font-medium">อัปเดต</th>
-            <th class="w-14 px-3 py-3"><span class="sr-only">การจัดการ</span></th>
+          <tr class="border-b border-ink-100 bg-surface text-[12px] font-semibold text-ink-soft">
+            <th class="whitespace-nowrap px-5 py-3.5">แหล่งข้อมูล</th>
+            <th class="w-[120px] whitespace-nowrap px-3 py-3.5">ประเภท</th>
+            <th class="w-[110px] whitespace-nowrap px-3 py-3.5 text-right">จำนวนแถว</th>
+            <th class="w-[140px] whitespace-nowrap px-3 py-3.5">คุณภาพ</th>
+            <th class="hidden w-[130px] whitespace-nowrap px-3 py-3.5 2xl:table-cell">อัปเดต</th>
+            <th class="w-16 px-3 py-3.5"><span class="sr-only">การจัดการ</span></th>
           </tr>
         </thead>
-        <tbody>
+        <tbody class="divide-y divide-ink-100/70">
           <tr
             v-for="source in pagedSources"
             :key="source.id"
-            class="odd:bg-surface even:bg-canvas/50 cursor-pointer transition-colors hover:bg-neutral-100/70"
+            class="cursor-pointer bg-surface transition-colors hover:bg-[#eceef1]"
             @click="router.navigate({ to: `/app/data-sources/${source.id}` })"
           >
-            <td class="px-4 py-3">
+            <td class="px-5 py-4">
               <div class="flex items-center gap-3">
-                <FileSpreadsheet class="h-4 w-4 shrink-0 text-neutral-500" aria-hidden="true" />
+                <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-surface">
+                  <FileSpreadsheet class="h-4 w-4 text-ink-soft" aria-hidden="true" />
+                </span>
                 <div class="min-w-0">
-                  <p class="truncate text-[12.5px] font-semibold text-ink hover:underline">{{ source.name }}</p>
-                  <p class="mt-0.5 max-w-[280px] truncate text-[11px] text-muted">
+                  <p class="truncate text-[13.5px] font-semibold text-ink">{{ source.name }}</p>
+                  <p class="mt-0.5 max-w-[320px] truncate text-[12px] text-muted">
                     {{ source.fileName }} · {{ source.period }}
                   </p>
+                  <div class="mt-1.5">
+                    <IndustryPicker
+                      :model-value="source.industryId ?? null"
+                      :disabled="assigningId === source.id"
+                      @update:model-value="assignIndustry(source, $event)"
+                    />
+                  </div>
                 </div>
               </div>
             </td>
-            <td class="px-3 py-3">
-              <span :class="cn('inline-flex h-[22px] w-28 items-center justify-center rounded-full px-2.5 text-center text-[11px] font-semibold', typeMeta[source.type].className)">
+            <td class="px-3 py-4">
+              <span :class="cn('inline-flex h-[24px] w-[92px] items-center justify-center rounded-full px-2.5 text-center text-[11.5px] font-semibold', typeMeta[source.type].className)">
                 {{ typeMeta[source.type].label }}
               </span>
             </td>
-            <td class="tabular px-3 py-3 text-right text-[12.5px] text-ink-soft">{{ formatNumber(source.rowCount) }}</td>
-            <td class="px-3 py-3">
-              <div class="flex flex-wrap items-center gap-1.5">
-                <AppBadge v-if="source.isDemo" tone="warning">ตัวอย่าง</AppBadge>
+            <td class="tabular px-3 py-4 text-right text-[13px] font-medium text-ink">{{ formatNumber(source.rowCount) }}</td>
+            <td class="px-3 py-4">
+              <div class="flex flex-col items-start gap-1.5">
                 <AppBadge :tone="qualityMeta[source.quality].tone">{{ qualityMeta[source.quality].label }}</AppBadge>
               </div>
             </td>
-            <td class="px-3 py-3 text-[12px] text-muted">{{ timeAgo(source.updatedAt) }}</td>
-            <td class="px-3 py-3">
+            <td class="hidden whitespace-nowrap px-3 py-4 text-[12px] text-ink-soft 2xl:table-cell">{{ timeAgo(source.updatedAt) }}</td>
+            <td class="px-3 py-4">
               <button
                 type="button"
-                class="inline-flex h-10 w-10 items-center justify-center rounded-lg text-muted transition hover:bg-danger-soft hover:text-danger"
+                class="inline-flex h-10 w-10 items-center justify-center rounded-lg text-faint transition hover:bg-danger-soft hover:text-danger"
                 :aria-label="`ลบ ${source.name}`"
-                @click="deleteTarget = source"
+                @click.stop="deleteTarget = source"
               >
                 <Trash2 class="h-4 w-4" aria-hidden="true" />
               </button>
@@ -360,7 +368,7 @@ function downloadTemplate() {
       <li
         v-for="source in pagedSources"
         :key="source.id"
-        class="odd:bg-surface even:bg-canvas/50 cursor-pointer transition-colors hover:bg-neutral-100/70"
+        class="cursor-pointer bg-surface transition-colors hover:bg-[#eceef1]"
         @click="router.navigate({ to: `/app/data-sources/${source.id}` })"
       >
         <div class="flex items-start gap-3 p-4">
@@ -369,19 +377,25 @@ function downloadTemplate() {
             <p class="text-[13px] font-semibold text-ink">{{ source.name }}</p>
             <p class="mt-0.5 truncate text-[11px] text-muted">{{ source.fileName }} · {{ source.period }}</p>
             <div class="mt-2 flex flex-wrap items-center gap-1.5">
-              <span :class="cn('inline-flex h-[22px] w-28 items-center justify-center rounded-full px-2.5 text-center text-[11px] font-semibold', typeMeta[source.type].className)">
+              <span :class="cn('inline-flex h-[22px] w-[92px] items-center justify-center rounded-full px-2.5 text-center text-[11px] font-semibold', typeMeta[source.type].className)">
                 {{ typeMeta[source.type].label }}
               </span>
-              <AppBadge v-if="source.isDemo" tone="warning">ตัวอย่าง</AppBadge>
               <AppBadge :tone="qualityMeta[source.quality].tone">{{ qualityMeta[source.quality].label }}</AppBadge>
               <span class="text-[10.5px] text-muted">{{ formatNumber(source.rowCount) }} แถว · {{ timeAgo(source.updatedAt) }}</span>
+              <span @click.stop>
+                <IndustryPicker
+                  :model-value="source.industryId ?? null"
+                  :disabled="assigningId === source.id"
+                  @update:model-value="assignIndustry(source, $event)"
+                />
+              </span>
             </div>
           </div>
           <button
             type="button"
             class="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-muted transition hover:bg-danger-soft hover:text-danger"
             :aria-label="`ลบ ${source.name}`"
-            @click="deleteTarget = source"
+            @click.stop="deleteTarget = source"
           >
             <Trash2 class="h-4 w-4" aria-hidden="true" />
           </button>
@@ -419,14 +433,10 @@ function downloadTemplate() {
       </div>
     </div>
 
-    <div v-if="attentionCount" class="flex items-center gap-2.5 rounded-2xl bg-[#f4f5f7] px-4 py-3 text-[12px] text-ink">
-      <CircleAlert class="h-4 w-4 shrink-0 text-amber-600" aria-hidden="true" />
-      <p class="leading-relaxed">
-        มี {{ attentionCount }} ชุดที่ควรตรวจสอบ ข้อมูลยังใช้วิเคราะห์ได้ แต่ตัวเลขอาจคลาดเคลื่อน
-      </p>
-    </div>
     </div>
   </section>
+
+  </div>
 
   <AppModal
     :open="Boolean(deleteTarget)"

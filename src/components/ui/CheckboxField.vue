@@ -3,7 +3,7 @@ import { computed, useId } from 'vue'
 import { Check } from '@lucide/vue'
 
 const props = defineProps<{
-  label: string
+  label?: string
   description?: string
   error?: string
   disabled?: boolean

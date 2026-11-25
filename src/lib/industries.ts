@@ -35,6 +35,7 @@ export interface IndustryProfile {
     priorYearMarginDelta: number
     costSplit: { materials: number; labor: number; expenses: number }
     costLabels: { materials: string; labor: string; expenses: string }
+    costLabelsEn?: { materials: string; labor: string; expenses: string }
     insight: { title: string; body: string; action: string; prompt: string }
     sources: IndustrySampleSource[]
     quickPrompts: string[]
@@ -71,6 +72,11 @@ export const INDUSTRY_PROFILES: Record<IndustryId, IndustryProfile> = {
         materials: 'น้ำมันและค่าทางด่วน',
         labor: 'ค่าแรงพนักงานขับรถ',
         expenses: 'ค่าซ่อมบำรุงและคลังสินค้า',
+      },
+      costLabelsEn: {
+        materials: 'Fuel & tolls',
+        labor: 'Driver wages',
+        expenses: 'Maintenance & warehousing',
       },
       insight: {
         title: 'เที่ยววิ่งเปล่าและต้นทุนน้ำมันกำลังกัดกำไร',
@@ -120,6 +126,11 @@ export const INDUSTRY_PROFILES: Record<IndustryId, IndustryProfile> = {
         materials: 'ต้นทุนเชื้อเพลิงและสต็อก',
         labor: 'ค่าแรงพนักงานสถานี',
         expenses: 'ค่าขนส่งและค่าดำเนินงาน',
+      },
+      costLabelsEn: {
+        materials: 'Fuel & inventory',
+        labor: 'Station staff wages',
+        expenses: 'Logistics & operations',
       },
       insight: {
         title: 'ราคาเชื้อเพลิงผันผวนกระทบสต็อกและมาร์จิ้น',
@@ -171,6 +182,11 @@ export const INDUSTRY_PROFILES: Record<IndustryId, IndustryProfile> = {
         labor: 'ค่าแรงช่างเทคนิค EV',
         expenses: 'ค่าสถานีชาร์จและประกัน',
       },
+      costLabelsEn: {
+        materials: 'Vehicles & batteries',
+        labor: 'EV technician wages',
+        expenses: 'Charging & insurance',
+      },
       insight: {
         title: 'ต้นทุนแบตเตอรี่และอะไหล่ EV ยังเป็นตัวถ่วงหลัก',
         body: 'ต้นทุนแบตเตอรี่และอะไหล่คิดเป็น 64% ของต้นทุนรวม และอะไหล่บางรายการมีรอบสต็อกนานกว่า 60 วัน ทำให้เงินจมในสต็อก',
@@ -220,6 +236,11 @@ export const INDUSTRY_PROFILES: Record<IndustryId, IndustryProfile> = {
         materials: 'ต้นทุนเวชภัณฑ์',
         labor: 'ค่าแรงบุคลากรทางการแพทย์',
         expenses: 'ค่าดำเนินงานคลินิก',
+      },
+      costLabelsEn: {
+        materials: 'Medical supplies',
+        labor: 'Medical staff wages',
+        expenses: 'Clinic operations',
       },
       insight: {
         title: 'รอบเบิกจ่ายภาครัฐกระทบเงินสดแม้มาร์จิ้นดี',
@@ -272,6 +293,11 @@ export const INDUSTRY_PROFILES: Record<IndustryId, IndustryProfile> = {
         labor: 'ค่าแรงวิศวกรความปลอดภัย',
         expenses: 'ค่าการตลาดและคอมพลายแอนซ์',
       },
+      costLabelsEn: {
+        materials: 'Cloud & hardware',
+        labor: 'Security engineer wages',
+        expenses: 'Marketing & compliance',
+      },
       insight: {
         title: 'Sales cycle ยาวและต้นทุนวิศวกรสูง',
         body: 'ต้นทุนบุคลากรผู้เชี่ยวชาญคิดเป็น 54% ของต้นทุนรวม ขณะที่สัญญาองค์กรใช้เวลา 4–6 เดือน จึงต้องบริหาร utilisation ให้เต็ม',
@@ -321,6 +347,11 @@ export const INDUSTRY_PROFILES: Record<IndustryId, IndustryProfile> = {
         labor: 'ค่าแรงหน้าร้าน',
         expenses: 'ค่าเช่าและค่าดำเนินงาน',
       },
+      costLabelsEn: {
+        materials: 'Ingredients & packaging',
+        labor: 'Front-of-house wages',
+        expenses: 'Rent & operations',
+      },
       insight: {
         title: 'ต้นทุนบรรจุภัณฑ์กำลังกัดกำไร',
         body: 'ต้นทุนวัตถุดิบเพิ่มขึ้น 6.2% ใน 30 วันล่าสุด โดยหลักมาจากบรรจุภัณฑ์ ขณะที่ยอดขายยังโต 12.4% ทำให้กำไรโดยรวมยังอยู่ในเกณฑ์ดี',
@@ -352,7 +383,7 @@ export const FOCUS_INDUSTRIES: IndustryProfile[] = [
 ]
 
 export function normalizeIndustryId(value?: string | null): IndustryId {
-  if (value && value in INDUSTRY_PROFILES) return value as IndustryId
+  if (value && Object.hasOwn(INDUSTRY_PROFILES, value)) return value as IndustryId
   return 'fnb'
 }
 

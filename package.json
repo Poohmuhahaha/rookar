@@ -10,13 +10,17 @@
     "typecheck": "vue-tsc --noEmit",
     "test": "vitest run && bun test server",
     "test:e2e": "playwright test",
-    "deploy": "bun run build && bunx wrangler pages deploy dist --project-name=rookar --branch=production",
+    "deploy": "bun run build && bunx wrangler deploy",
     "dev:web": "vite",
     "dev:api": "bun --watch server/index.ts",
     "test:server": "bun test server",
     "db:reset": "bun run server/reset.ts",
     "typecheck:server": "tsc --noEmit -p tsconfig.server.json",
-    "docker:up": "bun run build && docker compose up -d --build"
+    "docker:up": "bun run build && docker compose up -d --build",
+    "deploy:dry": "bun run build && bunx wrangler deploy --dry-run",
+    "dev:worker": "bun run build && bunx wrangler dev",
+    "db:migrate:local": "bunx wrangler d1 migrations apply rookar_db --local",
+    "db:migrate:remote": "bunx wrangler d1 migrations apply rookar_db --remote"
   },
   "dependencies": {
     "@fontsource/inter": "^5.3.0",
@@ -30,6 +34,7 @@
     "clsx": "^2.1.1",
     "date-fns": "^4.4.0",
     "echarts": "^6.1.0",
+    "hash-wasm": "^4.13.0",
     "hono": "^4.13.16",
     "motion-v": "^2.8.0",
     "msw": "^3.0.3",
@@ -50,7 +55,8 @@
     "typescript": "~5.9.3",
     "vite": "^8.3.5",
     "vitest": "^5.0.5",
-    "vue-tsc": "^3.3.13"
+    "vue-tsc": "^3.3.13",
+    "wrangler": "4.168.0"
   },
   "packageManager": "bun@1.4.3"
 }

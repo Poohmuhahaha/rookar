@@ -1,24 +1,28 @@
-import { Database } from 'bun:sqlite'
-import { mkdirSync } from 'node:fs'
-import { dirname } from 'node:path'
-import { env } from './env'
+import { getSqlClient, type SqlClient, type SqlStatement } from './runtime'
 
-const databasePath = env.databaseUrl
-if (databasePath !== ':memory:') {
-  mkdirSync(dirname(databasePath), { recursive: true })
+export type D1ResultLike<T> = {
+  results?: T[]
+  success?: boolean
+  meta?: { changes?: number }
 }
 
-export const db = new Database(databasePath, { create: true })
-
-if (databasePath !== ':memory:') {
-  db.exec('PRAGMA journal_mode = WAL;')
+export interface D1PreparedStatementLike {
+  bind(...values: unknown[]): D1PreparedStatementLike
+  first<T = unknown>(): Promise<T | null>
+  all<T = unknown>(): Promise<D1ResultLike<T>>
+  run(): Promise<D1ResultLike<unknown>>
 }
-db.exec('PRAGMA foreign_keys = ON;')
 
-db.exec(`
+export interface D1DatabaseLike {
+  prepare(sql: string): D1PreparedStatementLike
+  batch<T = unknown>(statements: D1PreparedStatementLike[]): Promise<D1ResultLike<T>[]>
+}
+
+export const SCHEMA_SQL = `
   CREATE TABLE IF NOT EXISTS users (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
+    username TEXT,
     email TEXT NOT NULL UNIQUE,
     password_hash TEXT NOT NULL,
     role TEXT NOT NULL DEFAULT 'owner',
@@ -60,6 +64,7 @@ db.exec(`
     file_name TEXT NOT NULL,
     is_demo INTEGER NOT NULL DEFAULT 0,
     industry_id TEXT,
+    industry_confidence REAL,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
   );
@@ -95,10 +100,11 @@ db.exec(`
   );
 
   CREATE TABLE IF NOT EXISTS conversations (
-    id TEXT PRIMARY KEY,
+    id TEXT NOT NULL,
     user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     data_json TEXT NOT NULL,
-    updated_at TEXT NOT NULL
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (user_id, id)
   );
   CREATE INDEX IF NOT EXISTS idx_conversations_user ON conversations(user_id, updated_at DESC);
 
@@ -117,16 +123,31 @@ db.exec(`
   );
   CREATE INDEX IF NOT EXISTS idx_password_resets_user ON password_resets(user_id);
 
+  CREATE TABLE IF NOT EXISTS import_preview_rows (
+    preview_id TEXT NOT NULL REFERENCES import_previews(id) ON DELETE CASCADE,
+    row_index INTEGER NOT NULL,
+    payload_json TEXT NOT NULL,
+    PRIMARY KEY (preview_id, row_index)
+  );
+  CREATE INDEX IF NOT EXISTS idx_import_previews_expires ON import_previews(expires_at);
+
   CREATE TABLE IF NOT EXISTS macro_cache (
     cache_key TEXT PRIMARY KEY,
     payload_json TEXT NOT NULL,
     saved_at INTEGER NOT NULL
   );
-`)
 
+  CREATE TABLE IF NOT EXISTS rate_limits (
+    key TEXT PRIMARY KEY,
+    count INTEGER NOT NULL,
+    reset_at INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_rate_limits_reset ON rate_limits(reset_at);
+`
 export type DbUser = {
   id: string
   name: string
+  username: string | null
   email: string
   password_hash: string
   role: 'owner' | 'manager' | 'staff' | 'admin'
@@ -134,4 +155,44 @@ export type DbUser = {
   plan: 'Free' | 'Pro' | 'Enterprise'
   onboarding_complete: number
   created_at: string
+}
+
+export function createD1SqlClient(database: D1DatabaseLike): SqlClient {
+  return {
+    async all<T>(sql: string, params: unknown[] = []) {
+      const result = await database.prepare(sql).bind(...params).all<T>()
+      return result.results ?? []
+    },
+    async first<T>(sql: string, params: unknown[] = []) {
+      return database.prepare(sql).bind(...params).first<T>()
+    },
+    async run(sql: string, params: unknown[] = []) {
+      const result = await database.prepare(sql).bind(...params).run()
+      return { changes: result.meta?.changes ?? 0 }
+    },
+    async batch(statements: SqlStatement[]) {
+      if (statements.length === 0) return
+      await database.batch(statements.map((statement) => database.prepare(statement.sql).bind(...statement.params)))
+    },
+  }
+}
+
+export const db = {
+  query<T = unknown>(sql: string) {
+    return {
+      all: (...params: unknown[]) => getSqlClient().all<T>(sql, params),
+      get: (...params: unknown[]) => getSqlClient().first<T>(sql, params),
+      run: (...params: unknown[]) => getSqlClient().run(sql, params),
+    }
+  },
+  batch(statements: SqlStatement[]) {
+    return getSqlClient().batch(statements)
+  },
+}
+
+export async function batchInChunks(statements: SqlStatement[], size = 80) {
+  const client = getSqlClient()
+  for (let index = 0; index < statements.length; index += size) {
+    await client.batch(statements.slice(index, index + size))
+  }
 }

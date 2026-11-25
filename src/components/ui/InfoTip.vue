@@ -34,10 +34,10 @@ withDefaults(
         <TooltipContent
           :side="side"
           :side-offset="7"
-          class="info-tip-content z-[70] max-w-[260px] rounded-lg bg-ink-100 px-3 py-2 text-xs leading-relaxed text-ink shadow-float"
+          class="info-tip-content z-[70] max-w-[260px] rounded-lg border border-ink-100 bg-white px-3 py-2 text-xs leading-relaxed text-ink shadow-[0_8px_24px_rgba(0,0,0,0.12)]"
         >
           {{ text }}
-          <TooltipArrow class="fill-ink-100" />
+          <TooltipArrow class="fill-white" />
         </TooltipContent>
       </TooltipPortal>
     </TooltipRoot>

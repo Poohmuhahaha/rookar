@@ -22,6 +22,7 @@ import {
 } from '@lucide/vue'
 import AppModal from '@/components/ui/AppModal.vue'
 import AppButton from '@/components/ui/AppButton.vue'
+import AgentAvatar from '@/components/ui/AgentAvatar.vue'
 import {
   agentsList,
   toggleAgentEnabled,
@@ -283,22 +284,22 @@ function handleCreateAgent() {
             กลับ
           </button>
           <div class="flex items-center gap-2">
-            <span
-              class="h-2 w-2 rounded-full"
-              :style="{ backgroundColor: inspectingAgent.color }"
-            />
+            <AgentAvatar :name="inspectingAgent.name" :color="inspectingAgent.color" size="xs" />
             <span class="text-xs font-semibold text-ink">{{ inspectingAgent.name }}</span>
           </div>
         </div>
 
         <!-- Identity -->
         <div class="flex items-center justify-between rounded-xl bg-neutral-50 px-3.5 py-3 border border-black/[0.04]">
-          <div>
-            <div class="flex items-center gap-2">
-              <h4 class="text-xs font-bold text-ink">{{ inspectingAgent.name }}</h4>
-              <span class="text-[10px] text-muted">· {{ inspectingAgent.creator.name }}</span>
+          <div class="flex items-center gap-2.5">
+            <AgentAvatar :name="inspectingAgent.name" :color="inspectingAgent.color" size="md" />
+            <div>
+              <div class="flex items-center gap-2">
+                <h4 class="text-xs font-bold text-ink">{{ inspectingAgent.name }}</h4>
+                <span class="text-[10px] text-muted">· {{ inspectingAgent.creator.name }}</span>
+              </div>
+              <p class="text-[11px] text-muted mt-0.5">{{ inspectingAgent.role }}</p>
             </div>
-            <p class="text-[11px] text-muted mt-0.5">{{ inspectingAgent.role }}</p>
           </div>
 
           <button
@@ -560,14 +561,13 @@ function handleCreateAgent() {
               <div>
                 <div class="flex items-start justify-between gap-2">
                   <div class="min-w-0">
-                    <div class="flex items-center gap-1.5">
-                      <span
-                        class="h-2 w-2 rounded-full shrink-0"
-                        :style="{ backgroundColor: agent.color }"
-                      />
-                      <h4 class="text-xs font-bold text-ink truncate">{{ agent.name }}</h4>
+                    <div class="flex items-center gap-2">
+                      <AgentAvatar :name="agent.name" :color="agent.color" size="sm" />
+                      <div class="min-w-0">
+                        <h4 class="text-xs font-bold text-ink truncate">{{ agent.name }}</h4>
+                        <p class="text-[11px] text-muted truncate mt-0.5">{{ agent.role }}</p>
+                      </div>
                     </div>
-                    <p class="text-[11px] text-muted truncate mt-0.5">{{ agent.role }}</p>
                   </div>
 
                   <!-- Minimal Toggle Switch -->
@@ -601,35 +601,43 @@ function handleCreateAgent() {
                   {{ agent.chatScope === 'specific' ? `จำกัด ${agent.allowedChatIds?.length || 0} แชท` : 'ทุกแชท' }}
                 </span>
 
-                <div class="flex items-center gap-2.5">
+                <div class="flex items-center gap-1">
                   <button
                     type="button"
-                    class="text-muted hover:text-ink transition"
+                    class="inline-flex h-6 w-6 items-center justify-center rounded-md text-muted transition hover:bg-neutral-100 hover:text-ink"
+                    aria-label="ดูตรรกะของ Agent"
+                    title="ตรรกะ"
                     @click="openLogicInspector(agent)"
                   >
-                    ตรรกะ
+                    <Brain class="h-3.5 w-3.5" aria-hidden="true" />
                   </button>
                   <button
                     type="button"
-                    class="text-muted hover:text-ink transition"
+                    class="inline-flex h-6 w-6 items-center justify-center rounded-md text-muted transition hover:bg-neutral-100 hover:text-ink"
+                    aria-label="ตั้งค่าสิทธิ์ของ Agent"
+                    title="สิทธิ์"
                     @click="openPermissionEditor(agent)"
                   >
-                    สิทธิ์
+                    <Lock class="h-3.5 w-3.5" aria-hidden="true" />
                   </button>
                   <button
                     type="button"
-                    class="text-muted hover:text-ink transition"
+                    class="inline-flex h-6 w-6 items-center justify-center rounded-md text-muted transition hover:bg-neutral-100 hover:text-ink"
+                    aria-label="ปรับแต่ง Agent"
+                    title="ปรับแต่ง"
                     @click="startCustomizeAgent(agent)"
                   >
-                    ปรับแต่ง
+                    <Edit3 class="h-3.5 w-3.5" aria-hidden="true" />
                   </button>
                   <button
                     v-if="agent.isCustom"
                     type="button"
-                    class="text-neutral-400 hover:text-red-600 transition"
+                    class="inline-flex h-6 w-6 items-center justify-center rounded-md text-neutral-400 transition hover:bg-red-50 hover:text-red-600"
+                    aria-label="ลบ Agent"
+                    title="ลบ Agent"
                     @click="deleteCustomAgent(agent.id)"
                   >
-                    <Trash2 class="h-3 w-3" />
+                    <Trash2 class="h-3.5 w-3.5" aria-hidden="true" />
                   </button>
                 </div>
               </div>
@@ -679,14 +687,13 @@ function handleCreateAgent() {
               <div>
                 <div class="flex items-start justify-between gap-2">
                   <div class="min-w-0">
-                    <div class="flex items-center gap-1.5">
-                      <span
-                        class="h-2 w-2 rounded-full shrink-0"
-                        :style="{ backgroundColor: agent.color }"
-                      />
-                      <h4 class="text-xs font-bold text-ink truncate">{{ agent.name }}</h4>
+                    <div class="flex items-center gap-2">
+                      <AgentAvatar :name="agent.name" :color="agent.color" size="sm" />
+                      <div class="min-w-0">
+                        <h4 class="text-xs font-bold text-ink truncate">{{ agent.name }}</h4>
+                        <p class="text-[11px] text-muted truncate mt-0.5">{{ agent.role }}</p>
+                      </div>
                     </div>
-                    <p class="text-[11px] text-muted truncate mt-0.5">{{ agent.role }}</p>
                   </div>
                   <span class="text-[10px] text-muted shrink-0">{{ agent.creator.name }}</span>
                 </div>
@@ -722,52 +729,47 @@ function handleCreateAgent() {
           </div>
         </div>
 
-        <!-- TAB 3: CREATE / CUSTOMIZE FORM (ULTRA CLEAN & MINIMAL) -->
-        <div v-else class="space-y-3.5 max-w-lg mx-auto py-1">
-          <div class="flex items-center justify-between border-b border-black/[0.06] pb-2">
-            <span class="text-xs font-bold text-ink">
+        <!-- TAB 3: CREATE / CUSTOMIZE FORM -->
+        <div v-else class="space-y-5">
+          <div class="border-b border-black/[0.06] pb-3">
+            <h3 class="text-base font-bold text-ink">
               {{ editingCustomAgentId ? 'แก้ไขข้อมูล Agent' : 'สร้าง Agent ใหม่' }}
-            </span>
-            <button
-              type="button"
-              class="text-xs text-muted hover:text-ink transition"
-              @click="cancelCustomize"
-            >
-              ยกเลิก
-            </button>
+            </h3>
+            <p class="mt-1 text-[12px] leading-relaxed text-muted">
+              กำหนดชื่อ บทบาท สไตล์การตอบ และคำสั่งที่ใช้กำกับพฤติกรรมของ Agent
+            </p>
           </div>
 
-          <form class="space-y-3" @submit.prevent="handleCreateAgent">
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+          <form class="space-y-5" @submit.prevent="handleCreateAgent">
+            <div class="grid gap-4 sm:grid-cols-2">
               <div>
-                <label class="block text-[11px] font-medium text-muted mb-1">ชื่อ Agent</label>
+                <label class="mb-1.5 block text-[11.5px] font-medium text-ink-soft">ชื่อ Agent</label>
                 <input
                   v-model="newName"
                   type="text"
                   required
                   placeholder="เช่น พี่ต่อ คุมต้นทุน"
-                  class="w-full rounded-lg bg-neutral-50 px-2.5 py-1.5 text-xs text-ink placeholder:text-neutral-400 focus:bg-white focus:outline-none focus:ring-1 focus:ring-black"
+                  class="h-10 w-full rounded-xl border border-transparent bg-neutral-50 px-3 text-[12.5px] text-ink transition placeholder:text-neutral-400 focus:border-black/10 focus:bg-white focus:outline-none focus:ring-1 focus:ring-black"
                 />
               </div>
-
               <div>
-                <label class="block text-[11px] font-medium text-muted mb-1">ตำแหน่ง / ความเชี่ยวชาญ</label>
+                <label class="mb-1.5 block text-[11.5px] font-medium text-ink-soft">ตำแหน่ง / ความเชี่ยวชาญ</label>
                 <input
                   v-model="newRole"
                   type="text"
                   required
                   placeholder="เช่น ผู้จัดการต้นทุนร้านอาหาร"
-                  class="w-full rounded-lg bg-neutral-50 px-2.5 py-1.5 text-xs text-ink placeholder:text-neutral-400 focus:bg-white focus:outline-none focus:ring-1 focus:ring-black"
+                  class="h-10 w-full rounded-xl border border-transparent bg-neutral-50 px-3 text-[12.5px] text-ink transition placeholder:text-neutral-400 focus:border-black/10 focus:bg-white focus:outline-none focus:ring-1 focus:ring-black"
                 />
               </div>
             </div>
 
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            <div class="grid gap-4 sm:grid-cols-2">
               <div>
-                <label class="block text-[11px] font-medium text-muted mb-1">หมวดหมู่</label>
+                <label class="mb-1.5 block text-[11.5px] font-medium text-ink-soft">หมวดหมู่</label>
                 <select
                   v-model="newCategory"
-                  class="w-full rounded-lg bg-neutral-50 px-2.5 py-1.5 text-xs text-ink focus:bg-white focus:outline-none focus:ring-1 focus:ring-black"
+                  class="h-10 w-full rounded-xl border border-transparent bg-neutral-50 px-3 text-[12.5px] text-ink transition focus:border-black/10 focus:bg-white focus:outline-none focus:ring-1 focus:ring-black"
                 >
                   <option value="finance">การเงิน & ต้นทุน</option>
                   <option value="market">ตลาด & เศรษฐกิจ</option>
@@ -776,66 +778,66 @@ function handleCreateAgent() {
                   <option value="marketing">การตลาดโซเชียล</option>
                 </select>
               </div>
-
               <div>
-                <label class="block text-[11px] font-medium text-muted mb-1">สไตล์การตอบ</label>
-                <div class="grid grid-cols-2 gap-1">
-                  <button
-                    v-for="p in personalities"
-                    :key="p.id"
-                    type="button"
-                    :class="[
-                      'rounded-md py-1 text-[11px] font-medium transition text-center border',
-                      newPersonality === p.id
-                        ? 'bg-black text-white border-black'
-                        : 'bg-neutral-50 text-muted border-transparent hover:text-ink',
-                    ]"
-                    @click="newPersonality = p.id"
-                  >
-                    {{ p.label }}
-                  </button>
-                </div>
+                <label class="mb-1.5 block text-[11.5px] font-medium text-ink-soft">คำอธิบายย่อ</label>
+                <input
+                  v-model="newDescription"
+                  type="text"
+                  placeholder="สรุปหน้าที่และการวิเคราะห์สั้น ๆ"
+                  class="h-10 w-full rounded-xl border border-transparent bg-neutral-50 px-3 text-[12.5px] text-ink transition placeholder:text-neutral-400 focus:border-black/10 focus:bg-white focus:outline-none focus:ring-1 focus:ring-black"
+                />
               </div>
             </div>
 
             <div>
-              <label class="block text-[11px] font-medium text-muted mb-1">คำอธิบายย่อ</label>
-              <input
-                v-model="newDescription"
-                type="text"
-                placeholder="สรุปหน้าที่และการวิเคราะห์สั้นๆ"
-                class="w-full rounded-lg bg-neutral-50 px-2.5 py-1.5 text-xs text-ink placeholder:text-neutral-400 focus:bg-white focus:outline-none focus:ring-1 focus:ring-black"
-              />
+              <label class="mb-1.5 block text-[11.5px] font-medium text-ink-soft">สไตล์การตอบ</label>
+              <div class="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                <button
+                  v-for="p in personalities"
+                  :key="p.id"
+                  type="button"
+                  :class="[
+                    'inline-flex h-10 items-center justify-center rounded-xl border text-[12px] font-medium transition',
+                    newPersonality === p.id
+                      ? 'border-black bg-black text-white'
+                      : 'border-transparent bg-neutral-50 text-muted hover:bg-neutral-100 hover:text-ink',
+                  ]"
+                  :aria-pressed="newPersonality === p.id"
+                  @click="newPersonality = p.id"
+                >
+                  {{ p.label }}
+                </button>
+              </div>
             </div>
 
             <div>
-              <label class="block text-[11px] font-medium text-muted mb-1">
+              <label class="mb-1.5 block text-[11.5px] font-medium text-ink-soft">
                 คำสั่ง Prompt กำกับพฤติกรรม
               </label>
               <textarea
                 v-model="newPrompt"
-                rows="3"
+                rows="4"
                 placeholder="ระบุแนวทางการตอบ เช่น ให้ตรวจสอบ Food Cost อย่าให้เกิน 35% และเตือนเรื่องสต็อกของสด..."
-                class="w-full rounded-lg bg-neutral-50 px-2.5 py-1.5 text-xs text-ink placeholder:text-neutral-400 focus:bg-white focus:outline-none focus:ring-1 focus:ring-black resize-none"
+                class="w-full resize-none rounded-xl border border-transparent bg-neutral-50 px-3 py-2.5 text-[12.5px] leading-relaxed text-ink transition placeholder:text-neutral-400 focus:border-black/10 focus:bg-white focus:outline-none focus:ring-1 focus:ring-black"
               />
             </div>
 
             <div>
-              <label class="block text-[11px] font-medium text-muted mb-1">ป้ายกำกับ (คั่นด้วยจุลภาค)</label>
+              <label class="mb-1.5 block text-[11.5px] font-medium text-ink-soft">ป้ายกำกับ (คั่นด้วยจุลภาค)</label>
               <input
                 v-model="newTags"
                 type="text"
                 placeholder="เช่น คุมสต็อก, ชาบู, Food Cost"
-                class="w-full rounded-lg bg-neutral-50 px-2.5 py-1.5 text-xs text-ink placeholder:text-neutral-400 focus:bg-white focus:outline-none focus:ring-1 focus:ring-black"
+                class="h-10 w-full rounded-xl border border-transparent bg-neutral-50 px-3 text-[12.5px] text-ink transition placeholder:text-neutral-400 focus:border-black/10 focus:bg-white focus:outline-none focus:ring-1 focus:ring-black"
               />
             </div>
 
-            <div class="flex items-center justify-end gap-2 pt-2">
-              <AppButton variant="secondary" size="sm" type="button" @click="cancelCustomize">
+            <div class="flex items-center justify-end gap-2 border-t border-black/[0.06] pt-4">
+              <AppButton variant="secondary" size="sm" type="button" class="!h-10 px-4" @click="cancelCustomize">
                 ยกเลิก
               </AppButton>
-              <AppButton size="sm" type="submit">
-                {{ editingCustomAgentId ? 'บันทึก' : 'สร้าง' }}
+              <AppButton size="sm" type="submit" class="!h-10 px-5">
+                {{ editingCustomAgentId ? 'บันทึก' : 'สร้าง Agent' }}
               </AppButton>
             </div>
           </form>

@@ -51,16 +51,16 @@ const trendIcon = computed(() => {
 </script>
 
 <template>
-  <article class="card-fade group flex h-full flex-col justify-between p-4 sm:p-5">
+  <article class="card-fade group flex h-full flex-col justify-between !rounded-b-none p-4 sm:p-5">
     <div class="relative z-10">
       <!-- Header row: Label + Trend Pill -->
       <div class="kpi-header flex items-center justify-between gap-2">
-        <h3 class="flex items-center gap-1 text-[12.5px] font-medium text-ink-soft">
+        <h3 class="flex min-w-0 items-center gap-1 text-[12.5px] font-medium text-ink-soft">
           {{ label }}
           <InfoTip v-if="info" :text="info" />
         </h3>
-        <span :class="cn('kpi-trend inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-[11px] font-semibold tracking-tight', toneClass)">
-          <component :is="trendIcon" class="h-3 w-3" aria-hidden="true" />
+        <span :class="cn('kpi-trend inline-flex shrink-0 items-center gap-0.5 rounded-full px-2 py-1 text-[11.5px] font-semibold tracking-tight', toneClass)">
+          <component :is="trendIcon" class="h-3.5 w-3.5" aria-hidden="true" />
           {{ change }}
         </span>
       </div>
@@ -75,7 +75,7 @@ const trendIcon = computed(() => {
     </div>
 
     <!-- Full-width smooth bezier sparkline spanning across card base -->
-    <div v-if="spark.length > 1" class="relative -mx-4 -mb-4 sm:-mx-5 sm:-mb-5 mt-3.5 overflow-hidden rounded-b-[24px]">
+    <div v-if="spark.length > 1" class="relative -mx-4 -mb-4 sm:-mx-5 sm:-mb-5 mt-3.5 overflow-hidden">
       <Sparkline :values="spark" :color="sparkColor" class="h-9 w-full" />
     </div>
   </article>

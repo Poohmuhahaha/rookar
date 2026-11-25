@@ -19,14 +19,6 @@ function uid(prefix: string) {
   return `${prefix}_${Math.random().toString(36).slice(2, 9)}`
 }
 
-export async function seedSampleSources(industryId?: string | null): Promise<DataSource[]> {
-  const data = await apiFetch<{ sources: DataSource[] }>('/sources/seed', {
-    method: 'POST',
-    body: JSON.stringify({ industry: industryId ?? undefined }),
-  })
-  return data.sources
-}
-
 export async function login(email: string, password: string): Promise<Session> {
   const data = await apiFetch<{ session: Session }>('/auth/login', {
     method: 'POST',
@@ -36,10 +28,15 @@ export async function login(email: string, password: string): Promise<Session> {
   return data.session
 }
 
-export async function signup(name: string, email: string, password: string): Promise<Session> {
+export async function signup(
+  name: string,
+  username: string,
+  email: string,
+  password: string,
+): Promise<Session> {
   const data = await apiFetch<{ session: Session }>('/auth/signup', {
     method: 'POST',
-    body: JSON.stringify({ name, email, password }),
+    body: JSON.stringify({ name, username, email, password }),
   })
   setSession(data.session)
   return data.session
@@ -73,6 +70,14 @@ export async function listSources(): Promise<DataSource[]> {
   return data.sources
 }
 
+export async function setSourceIndustry(id: string, industryId: string | null): Promise<DataSource> {
+  const data = await apiFetch<{ source: DataSource }>(`/sources/${encodeURIComponent(id)}/industry`, {
+    method: 'PATCH',
+    body: JSON.stringify({ industryId }),
+  })
+  return data.source
+}
+
 export async function getSourceById(id: string): Promise<DataSource | null> {
   try {
     const data = await apiFetch<{ source: DataSource }>(`/sources/${encodeURIComponent(id)}`)
@@ -96,8 +101,9 @@ export async function deleteSource(id: string): Promise<void> {
 export async function getDashboard(
   range: '3m' | '6m' | '12m',
   industryId?: string | null,
+  lang: 'th' | 'en' = 'th',
 ): Promise<DashboardSummary | null> {
-  const params = new URLSearchParams({ range })
+  const params = new URLSearchParams({ range, lang })
   if (industryId) params.set('industry', industryId)
   const data = await apiFetch<{ dashboard: DashboardSummary | null }>(`/dashboard?${params}`)
   return data.dashboard
@@ -128,11 +134,12 @@ export async function validateImport(
 export async function commitImport(
   preview: ImportPreview,
   mapping: Record<string, string> = {},
+  industryId: string | null = null,
 ): Promise<DataSource> {
   if (!preview.previewId) throw new Error('ไม่พบ preview กรุณาตรวจสอบไฟล์ใหม่')
   const data = await apiFetch<{ source: DataSource }>(`/imports/${encodeURIComponent(preview.previewId)}/commit`, {
     method: 'POST',
-    body: JSON.stringify({ mapping }),
+    body: JSON.stringify({ mapping, industryId }),
   })
   return data.source
 }
@@ -170,10 +177,12 @@ export function saveConversations(conversations: Conversation[]) {
 
 export type AiChatOptions = {
   industryId?: string | null
+  language?: 'th' | 'en'
   specialistRole?: SpecialistType
   agentIds?: string[]
   history?: { role: 'user' | 'assistant'; content: string }[]
   attachment?: { name: string; content: string } | null
+  conversationId?: string
   signal?: AbortSignal
 }
 
@@ -188,10 +197,12 @@ export async function* streamAiReply(
     body: JSON.stringify({
       question,
       industry: options.industryId ?? undefined,
+      language: options.language ?? 'th',
       specialistRole: options.specialistRole ?? 'general',
       agentIds: options.agentIds ?? [],
       history: options.history ?? [],
       attachment: options.attachment ?? null,
+      conversationId: options.conversationId ?? undefined,
     }),
     signal: options.signal,
   })

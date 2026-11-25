@@ -45,34 +45,38 @@ const contentClass = computed(() => sizes[props.size])
         <DialogContent
           :class="
             cn(
-              'modal-zoom-in pointer-events-auto relative w-full max-h-[calc(100vh-2.5rem)] overflow-y-auto rounded-2xl bg-surface p-5 focus:outline-none sm:p-6',
+              'modal-zoom-in pointer-events-auto relative w-full max-h-[calc(100vh-2.5rem)] overflow-y-auto rounded-2xl bg-surface focus:outline-none',
               contentClass,
             )
           "
         >
-          <div class="pr-10">
-            <DialogTitle class="text-h3 font-semibold text-ink">{{ title }}</DialogTitle>
-            <DialogDescription v-if="description" class="mt-1 text-[13px] leading-relaxed text-muted">
-              {{ description }}
-            </DialogDescription>
+          <div class="sticky top-0 z-10 rounded-t-2xl bg-surface px-5 pb-4 pt-5 sm:px-6 sm:pt-6">
+            <div class="pr-10">
+              <DialogTitle class="text-h3 font-semibold text-ink">{{ title }}</DialogTitle>
+              <DialogDescription v-if="description" class="mt-1 text-[13px] leading-relaxed text-muted">
+                {{ description }}
+              </DialogDescription>
+            </div>
+
+            <DialogClose as-child>
+              <button
+                type="button"
+                class="absolute right-3 top-3 inline-flex h-10 w-10 items-center justify-center rounded-lg text-muted transition hover:bg-ink-50 hover:text-ink focus-visible:bg-ink-50 focus-visible:text-ink focus-visible:outline-none"
+                aria-label="ปิด"
+              >
+                <X class="h-4 w-4" aria-hidden="true" />
+              </button>
+            </DialogClose>
           </div>
 
-          <DialogClose as-child>
-            <button
-              type="button"
-              class="absolute right-3 top-3 inline-flex h-10 w-10 items-center justify-center rounded-lg text-muted transition hover:bg-ink-50 hover:text-ink focus-visible:bg-ink-50 focus-visible:text-ink focus-visible:outline-none"
-              aria-label="ปิด"
-            >
-              <X class="h-4 w-4" aria-hidden="true" />
-            </button>
-          </DialogClose>
+          <div class="px-5 pb-5 sm:px-6 sm:pb-6">
+            <div class="mt-1">
+              <slot />
+            </div>
 
-          <div class="mt-5">
-            <slot />
-          </div>
-
-          <div v-if="$slots.footer" class="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-            <slot name="footer" />
+            <div v-if="$slots.footer" class="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <slot name="footer" />
+            </div>
           </div>
         </DialogContent>
       </div>

@@ -1,15 +1,16 @@
 import { formatCurrency, formatPercent } from '../../src/lib/format'
 import type { Conversation } from '../../src/types'
 import { db } from '../db'
+import { newId } from '../auth'
 import { getDashboard } from './dashboard'
 import { listSources, profileForUser } from './sources'
 
 type Row = { data_json: string; updated_at: string }
 
-function seedConversations(userId: string): Conversation[] {
-  const profile = profileForUser(userId)
-  const summary = getDashboard(userId, '6m', profile.id)
-  const sources = listSources(userId)
+async function seedConversations(userId: string): Promise<Conversation[]> {
+  const profile = await profileForUser(userId)
+  const summary = await getDashboard(userId, '6m', profile.id)
+  const sources = await listSources(userId)
   const cost = summary?.costBreakdown.slice().sort((a, b) => b.share - a.share)[0]
   const revenue = summary?.revenue ?? 0
   const profit = summary?.profit ?? 0
@@ -19,7 +20,7 @@ function seedConversations(userId: string): Conversation[] {
   const earlier = new Date(Date.now() - 4 * 86_400_000).toISOString()
   return [
     {
-      id: 'conv_welcome',
+      id: newId('conv'),
       title: `วิเคราะห์ ${profile.shortLabel}`,
       preview: summary?.insight.title ?? 'เริ่มวิเคราะห์ธุรกิจของคุณ',
       updatedAt: now,
@@ -49,7 +50,7 @@ function seedConversations(userId: string): Conversation[] {
       ],
     },
     {
-      id: 'conv_profit',
+      id: newId('conv'),
       title: 'สรุปกำไร 6 เดือนล่าสุด',
       preview: `กำไรสุทธิ ${formatCurrency(profit)}`,
       updatedAt: yesterday,
@@ -68,7 +69,7 @@ function seedConversations(userId: string): Conversation[] {
       ],
     },
     {
-      id: 'conv_plan',
+      id: newId('conv'),
       title: 'วางแผนลดต้นทุน',
       preview: `โฟกัส ${cost?.label ?? 'ต้นทุนหลัก'}`,
       updatedAt: earlier,
@@ -89,24 +90,24 @@ function seedConversations(userId: string): Conversation[] {
   ]
 }
 
-export function getConversations(userId: string): Conversation[] {
-  const rows = db
-    .query('SELECT data_json FROM conversations WHERE user_id = ? ORDER BY updated_at DESC')
-    .all(userId) as Row[]
+export async function getConversations(userId: string): Promise<Conversation[]> {
+  const rows = await db
+    .query<Row>('SELECT data_json FROM conversations WHERE user_id = ? ORDER BY updated_at DESC')
+    .all(userId)
   if (rows.length > 0) {
     return rows.map((row) => JSON.parse(row.data_json) as Conversation)
   }
-  const seeded = seedConversations(userId)
-  saveConversations(userId, seeded)
+  const seeded = await seedConversations(userId)
+  await saveConversations(userId, seeded)
   return seeded
 }
 
-export function saveConversations(userId: string, conversations: Conversation[]) {
-  db.transaction(() => {
-    db.query('DELETE FROM conversations WHERE user_id = ?').run(userId)
-    const insert = db.query('INSERT INTO conversations (id, user_id, data_json, updated_at) VALUES (?, ?, ?, ?)')
-    for (const conversation of conversations) {
-      insert.run(conversation.id, userId, JSON.stringify(conversation), conversation.updatedAt || new Date().toISOString())
-    }
-  })()
+export async function saveConversations(userId: string, conversations: Conversation[]) {
+  await db.batch([
+    { sql: 'DELETE FROM conversations WHERE user_id = ?', params: [userId] },
+    ...conversations.map((conversation) => ({
+      sql: 'INSERT INTO conversations (id, user_id, data_json, updated_at) VALUES (?, ?, ?, ?)',
+      params: [conversation.id, userId, JSON.stringify(conversation), conversation.updatedAt || new Date().toISOString()],
+    })),
+  ])
 }

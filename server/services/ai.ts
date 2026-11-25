@@ -4,8 +4,9 @@ import { getBusiness } from '../auth'
 import { db } from '../db'
 import { env } from '../env'
 import { getDashboard } from './dashboard'
-import { listSources, profileForUser } from './sources'
+import { industryWithData, listSources, profileForUser } from './sources'
 import { getMacroBenchmark } from './macro'
+import { runToolCallingAgent } from './toolCalling'
 
 type Answer = { content: string; citations: Citation[] }
 
@@ -15,10 +16,12 @@ export type ChatAttachment = { name: string; content: string }
 export type ChatContext = {
   question: string
   industry?: string | null
+  language?: 'th' | 'en'
   specialistRole?: SpecialistType
   agentIds?: string[]
   history?: ChatHistoryEntry[]
   attachment?: ChatAttachment | null
+  conversationId?: string
   signal?: AbortSignal
 }
 
@@ -26,8 +29,8 @@ function topCost(summary: DashboardSummary) {
   return [...summary.costBreakdown].sort((a, b) => b.share - a.share)[0]
 }
 
-function sourceCitations(userId: string, summary: DashboardSummary): Citation[] {
-  const sources = listSources(userId)
+async function sourceCitations(userId: string, summary: DashboardSummary): Promise<Citation[]> {
+  const sources = await listSources(userId)
   const sales = sources.find((source) => source.type === 'sales') ?? sources[0]
   const cost = sources.find((source) => source.type === 'materials') ?? sources[1] ?? sales
   const main = topCost(summary)
@@ -106,9 +109,9 @@ function specialistLabel(role: SpecialistType) {
   return labels[role]
 }
 
-function loadAgents(userId: string, ids: string[]): AgentProfile[] {
+async function loadAgents(userId: string, ids: string[]): Promise<AgentProfile[]> {
   if (ids.length === 0) return []
-  const row = db.query('SELECT data_json FROM user_agents WHERE user_id = ?').get(userId) as { data_json: string } | null
+  const row = await db.query<{ data_json: string }>('SELECT data_json FROM user_agents WHERE user_id = ?').get(userId)
   if (!row) return []
   try {
     const agents = JSON.parse(row.data_json) as AgentProfile[]
@@ -138,32 +141,98 @@ async function maybeMacroContext(question: string): Promise<string> {
     const cpi = macro.indicators.cpiInflation
     const consumption = macro.indicators.householdConsumptionGrowth
     const unemployment = macro.indicators.unemploymentRate
+    const debt = macro.indicators.governmentDebt
+    const currentAccount = macro.indicators.currentAccountBalance
     return [
       `ข้อมูลมหภาคล่าสุด (${macro.periodLabel}):`,
-      `- GDP ประเทศไทย ${formatPercent(gdp.value)} (ปี ${Number(gdp.year) + 543})`,
-      `- การบริโภคภาคครัวเรือน ${formatPercent(consumption.value)}`,
-      `- เงินเฟ้อ CPI ${formatPercent(cpi.value)}`,
-      `- อัตราการว่างงาน ${formatPercent(unemployment.value)}`,
+      `- GDP ประเทศไทย ${formatPercent(gdp.value)} (${gdp.periodLabel ?? `ปี ${Number(gdp.year) + 543}`})`,
+      `- การบริโภคภาคครัวเรือน ${formatPercent(consumption.value)} (${consumption.periodLabel ?? `ปี ${Number(consumption.year) + 543}`})`,
+      `- เงินเฟ้อ CPI ${formatPercent(cpi.value)} (${cpi.periodLabel ?? `ปี ${Number(cpi.year) + 543}`})`,
+      `- อัตราการว่างงาน ${formatPercent(unemployment.value)} (${unemployment.periodLabel ?? `ปี ${Number(unemployment.year) + 543}`})`,
+      `- หนี้ภาครัฐ ${formatPercent(debt.value)} ของ GDP (${debt.periodLabel ?? `ปี ${Number(debt.year) + 543}`})`,
+      `- บัญชีเดินสะพัด ${formatPercent(currentAccount.value)} ของ GDP (${currentAccount.periodLabel ?? `ปี ${Number(currentAccount.year) + 543}`})`,
     ].join('\n')
   } catch {
-    return 'ไม่สามารถดึงข้อมูลมหภาคจาก World Bank ได้ในขณะนี้'
+    return 'ไม่สามารถดึงข้อมูลมหภาคจาก IMF / World Bank / NSO ได้ในขณะนี้'
   }
 }
 
+type SourceSnapshot = {
+  name: string
+  fileName: string
+  typeLabel: string
+  rowCount: number
+  rows: Record<string, string | number>[]
+}
+
+async function loadSourceSnapshots(userId: string, industry: string, perSource = 6): Promise<SourceSnapshot[]> {
+  const sources = (await listSources(userId))
+    .filter((source) => !source.isDemo && source.industryId === industry)
+    .slice(0, 5)
+  const snapshots: SourceSnapshot[] = []
+  for (const source of sources) {
+    const rows = (await db
+      .query<{ payload_json: string }>('SELECT payload_json FROM data_rows WHERE source_id = ? ORDER BY row_index DESC LIMIT ?')
+      .all(source.id, perSource))
+      .map((row) => {
+        try {
+          return JSON.parse(row.payload_json) as Record<string, string | number>
+        } catch {
+          return {}
+        }
+      })
+      .filter((row) => Object.keys(row).length > 0)
+    snapshots.push({
+      name: source.name,
+      fileName: source.fileName,
+      typeLabel: source.typeLabel,
+      rowCount: source.rowCount,
+      rows,
+    })
+  }
+  return snapshots
+}
+
+function formatSnapshots(snapshots: SourceSnapshot[]): string {
+  const parts = snapshots
+    .filter((snapshot) => snapshot.rows.length > 0)
+    .map((snapshot) => {
+      const columns = Object.keys(snapshot.rows[0])
+      const lines = snapshot.rows.map((row) =>
+        columns.map((column) => String(row[column] ?? '').slice(0, 48)).join(' | '),
+      )
+      const header = `[${snapshot.name} — ${snapshot.fileName} · ${snapshot.rowCount} แถว (ตัวอย่าง ${snapshot.rows.length})]`
+      return [header, columns.join(' | '), ...lines].join('\n')
+    })
+  return parts.join('\n\n')
+}
+
 async function buildSystemPrompt(userId: string, context: ChatContext): Promise<string> {
-  const summary = getDashboard(userId, '6m', context.industry)
-  const profile = profileForUser(userId, context.industry)
-  const business = getBusiness(userId)
-  const sources = listSources(userId)
-  const agents = loadAgents(userId, context.agentIds ?? [])
+  const resolvedIndustry = await industryWithData(userId, context.industry)
+  const summary = await getDashboard(userId, '6m', resolvedIndustry)
+  const profile = await profileForUser(userId, resolvedIndustry)
+  const business = await getBusiness(userId)
+  const sources = await listSources(userId)
+  const snapshots = await loadSourceSnapshots(userId, resolvedIndustry)
+  const agents = await loadAgents(userId, context.agentIds ?? [])
   const specialist = context.specialistRole ?? 'general'
   const macro = await maybeMacroContext(context.question)
 
+  const answerLanguage = context.language === 'en' ? 'en' : 'th'
   const sections: string[] = [
-    'คุณคือ ROOKAR ผู้ช่วยวิเคราะห์ธุรกิจสำหรับ SME ไทย ตอบเป็นภาษาไทยเสมอ',
+    answerLanguage === 'en'
+      ? 'You are ROOKAR, a business analyst assistant for Thai SMEs. Always answer in English.'
+      : 'คุณคือ ROOKAR ผู้ช่วยวิเคราะห์ธุรกิจสำหรับ SME ไทย ตอบเป็นภาษาไทยเสมอ',
+    answerLanguage === 'en'
+      ? 'Use only the data provided below or data returned by tools. Never invent numbers. If data is insufficient, say so clearly.'
+      : 'ใช้ข้อมูลที่ให้ด้านล่างเป็นหลัก ห้ามแต่งตัวเลขขึ้นเอง หากข้อมูลไม่พอให้บอกตรง ๆ ว่าไม่มีข้อมูลส่วนนั้น',
     'ใช้ข้อมูลที่ให้ด้านล่างเป็นหลัก ห้ามแต่งตัวเลขขึ้นเอง หากข้อมูลไม่พอให้บอกตรง ๆ ว่าไม่มีข้อมูลส่วนนั้น',
     'ตอบกระชับ เป็นข้อ ๆ ใส่ตัวเลขที่เกี่ยวข้อง และปิดท้ายด้วยขั้นตอนที่ทำต่อได้จริง',
     'หากเป็นการคาดการณ์หรือประมาณการ ต้องระบุว่าเป็นการประมาณ ไม่ใช่การรับประกันผลลัพธ์',
+    'คุณมี tools สำหรับดึงข้อมูลจริงจากระบบ (สรุปธุรกิจ, ไฟล์ข้อมูล, เศรษฐกิจมหภาค, เศรษฐกิจอุตสาหกรรม, การเปรียบเทียบ, ตรวจความพร้อมของข้อมูล) ให้เรียก tool ทุกครั้งที่ต้องใช้ตัวเลขหรือข้อมูลล่าสุด ห้ามเดาตัวเลขเอง',
+    'ก่อนตอบคำถามเชิงวางแผนธุรกิจ การตั้งราคา เมนู กลยุทธ์ หรือการวิเคราะห์ต้นทุน ให้เรียก check_data_readiness ก่อนเสมอ โดยเลือก task ให้ตรง (pricing, cost_analysis, market_analysis, cashflow)',
+    'ถ้า check_data_readiness คืน ready=false ห้ามสร้างแผนหรือตอบคำถามหลัก ให้ตอบเพียงคำถามที่จำเป็นเพื่อขอข้อมูลที่ขาด (ใช้ questions จาก tool ไม่เกิน 5 ข้อ) พร้อมบอกว่าขาดอะไรและเพราะอะไรจึงยังวิเคราะห์ไม่ได้',
+    'ห้ามใช้ค่าที่ขาดเป็น 0 หรือสมมติตัวเลขขึ้นมาแทนข้อมูลจริง และต้องแจ้งข้อจำกัดของข้อมูลอย่างตรงไปตรงมา',
   ]
 
   sections.push(
@@ -206,8 +275,19 @@ async function buildSystemPrompt(userId: string, context: ChatContext): Promise<
     sections.push(
       [
         '=== แหล่งข้อมูลที่เชื่อมต่อ ===',
-        ...sources.map((source) => `- ${source.name} (${source.typeLabel}) ${source.rowCount} แถว${source.isDemo ? ' [ข้อมูลตัวอย่าง]' : ''}`),
+        ...sources.map((source) => `- ${source.name} (${source.typeLabel}) ${source.rowCount} แถว`),
       ].join('\n'),
+    )
+  }
+
+  const snapshotText = formatSnapshots(snapshots)
+  if (snapshotText) {
+    sections.push(
+      [
+        '=== ตัวอย่างแถวข้อมูลจริงจากไฟล์ (ใช้วิเคราะห์ได้) ===',
+        snapshotText,
+        'หมายเหตุ: ตัวอย่างนี้เป็นบางแถวล่าสุด ส่วนตัวเลขสรุปด้านบนคำนวณจากทุกแถวในระบบ',
+      ].join('\n\n'),
     )
   }
 
@@ -234,11 +314,17 @@ async function buildSystemPrompt(userId: string, context: ChatContext): Promise<
   return sections.join('\n\n')
 }
 
+const OPENAI_COMPATIBLE_PROVIDERS = new Set(['openai', 'opencode', 'opencode-go'])
+
 function mockProviderEnabled() {
-  return env.aiProvider !== 'openai' || !env.openaiApiKey
+  return !OPENAI_COMPATIBLE_PROVIDERS.has(env.aiProvider) || !env.openaiApiKey
 }
 
-async function* streamOpenAi(messages: { role: string; content: string }[], signal?: AbortSignal): AsyncGenerator<AiStreamEvent> {
+async function* streamOpenAi(
+  messages: { role: string; content: string }[],
+  signal?: AbortSignal,
+  sessionId?: string,
+): AsyncGenerator<AiStreamEvent> {
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), 60_000)
   if (signal) {
@@ -253,6 +339,8 @@ async function* streamOpenAi(messages: { role: string; content: string }[], sign
         Authorization: `Bearer ${env.openaiApiKey}`,
         'Content-Type': 'application/json',
         Accept: 'text/event-stream',
+        'User-Agent': env.openaiUserAgent,
+        ...(sessionId ? { 'x-opencode-session': sessionId } : {}),
       },
       body: JSON.stringify({
         model: env.openaiModel,
@@ -304,8 +392,8 @@ async function* streamOpenAi(messages: { role: string; content: string }[], sign
 }
 
 export async function buildAnswer(userId: string, question: string, industry?: string | null): Promise<Answer> {
-  const summary = getDashboard(userId, '6m', industry)
-  const profile = profileForUser(userId, industry)
+  const summary = await getDashboard(userId, '6m', industry)
+  const profile = await profileForUser(userId, industry)
   if (!summary) {
     return {
       content: `ยังไม่มีข้อมูลเพียงพอสำหรับวิเคราะห์ครับ\n\nเริ่มจากนำเข้าไฟล์ CSV อย่างน้อย 1 ไฟล์ที่หน้า “แหล่งข้อมูล” หรือกด “นำเข้าข้อมูล” แล้วผมจะสรุปยอดขาย ต้นทุน และกำไรให้ทันที`,
@@ -315,7 +403,7 @@ export async function buildAnswer(userId: string, question: string, industry?: s
 
   const normalized = question.toLowerCase()
   const mainCost = topCost(summary)
-  const citations = sourceCitations(userId, summary)
+  const citations = await sourceCitations(userId, summary)
   const focus = profile.focusPoints.map((point) => `• ${point}`).join('\n')
   const quickPrompts = profile.sample.quickPrompts.map((prompt) => `• ${prompt}`).join('\n')
 
@@ -359,8 +447,8 @@ ${focus}`,
       return {
         content: `ภาพรวมเศรษฐกิจมหภาคล่าสุด (${macro.periodLabel}):
 
-• GDP ประเทศไทย ${formatPercent(gdp.value)} (ปี ${Number(gdp.year) + 543})
-• เงินเฟ้อ CPI ${formatPercent(cpi.value)}
+• GDP ประเทศไทย ${formatPercent(gdp.value)} (${gdp.periodLabel ?? `ปี ${Number(gdp.year) + 543}`})
+• เงินเฟ้อ CPI ${formatPercent(cpi.value)} (${cpi.periodLabel ?? `ปี ${Number(cpi.year) + 543}`})
 • รายได้ธุรกิจ 6 เดือนล่าสุด ${formatCurrency(summary.revenue)} (${summary.revenueDelta >= 0 ? '+' : ''}${summary.revenueDelta}%)
 • กำไรสุทธิ ${formatCurrency(summary.profit)} (${formatPercent(summary.margin)})
 
@@ -435,16 +523,18 @@ ${focus}`,
 }
 
 export async function* streamAnswer(userId: string, context: ChatContext): AsyncGenerator<AiStreamEvent> {
-  const summary = getDashboard(userId, '6m', context.industry)
-  const citations = summary ? sourceCitations(userId, summary) : []
+  const resolvedIndustry = await industryWithData(userId, context.industry)
+  const resolvedContext: ChatContext = { ...context, industry: resolvedIndustry }
+  const summary = await getDashboard(userId, '6m', resolvedIndustry)
+  const citations = summary ? await sourceCitations(userId, summary) : []
 
   if (mockProviderEnabled()) {
-    const answer = await buildAnswer(userId, context.question, context.industry)
+    const answer = await buildAnswer(userId, context.question, resolvedIndustry)
     const prefix: string[] = []
     if (context.specialistRole && context.specialistRole !== 'general') {
       prefix.push(`โหมดผู้เชี่ยวชาญ: ${specialistLabel(context.specialistRole)}`)
     }
-    const agents = loadAgents(userId, context.agentIds ?? [])
+    const agents = await loadAgents(userId, context.agentIds ?? [])
     if (agents.length > 0) {
       prefix.push(`ทีม Agent ที่เกี่ยวข้อง: ${agents.map((agent) => `${agent.name} (${agent.role})`).join(', ')}`)
     }
@@ -466,7 +556,7 @@ export async function* streamAnswer(userId: string, context: ChatContext): Async
     return
   }
 
-  const systemPrompt = await buildSystemPrompt(userId, context)
+  const systemPrompt = await buildSystemPrompt(userId, resolvedContext)
   const history = (context.history ?? [])
     .filter((entry) => entry.content.trim())
     .slice(-12)
@@ -475,13 +565,20 @@ export async function* streamAnswer(userId: string, context: ChatContext): Async
       content: truncate(entry.content.trim(), 2000),
     }))
 
-  const messages = [
-    { role: 'system', content: systemPrompt },
-    ...history,
-    { role: 'user', content: context.question },
-  ]
+  const conversationKey = context.conversationId
+    ?.replace(/^ses_/, '')
+    .replace(/[^A-Za-z0-9_-]/g, '')
+    .slice(0, 80)
+  const sessionId = conversationKey ? `ses_user_${userId}_${conversationKey}` : `ses_user_${userId}`
 
-  for await (const event of streamOpenAi(messages, context.signal)) {
+  for await (const event of runToolCallingAgent({
+    systemPrompt,
+    question: context.question,
+    history,
+    context: { userId, industry: resolvedIndustry },
+    sessionId,
+    signal: context.signal,
+  })) {
     yield event
   }
   for (const citation of citations) {

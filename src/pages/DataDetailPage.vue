@@ -18,9 +18,9 @@ import {
 } from '@lucide/vue'
 import PageHeader from '@/components/ui/PageHeader.vue'
 import AppButton from '@/components/ui/AppButton.vue'
-import AppBadge from '@/components/ui/AppBadge.vue'
 import AppModal from '@/components/ui/AppModal.vue'
-import { deleteSource, getSourceById, getSourceRows } from '@/lib/mockApi'
+import IndustryPicker from '@/components/ui/IndustryPicker.vue'
+import { deleteSource, getSourceById, getSourceRows, setSourceIndustry } from '@/lib/mockApi'
 import { formatNumber, timeAgo } from '@/lib/format'
 import { useToast } from '@/lib/toast'
 
@@ -40,6 +40,7 @@ const sourceId = computed(() => {
 })
 const search = ref('')
 const deleteModalOpen = ref(false)
+const assigningIndustry = ref(false)
 
 const { data: source, isPending: sourcePending } = useQuery({
   queryKey: computed(() => ['source', sourceId.value]),
@@ -64,6 +65,12 @@ const qualityMeta = {
   complete: { label: 'ครบถ้วนสมบูรณ์', tone: 'success' as const, desc: 'ข้อมูลพร้อมสำหรับการวิเคราะห์ทุกมิติ' },
   partial: { label: 'ควรตรวจสอบ', tone: 'warning' as const, desc: 'มีบางแถวที่อาจขาดข้อมูลคอลัมน์ที่ไม่จำเป็น' },
   duplicate: { label: 'มีข้อมูลซ้ำ', tone: 'danger' as const, desc: 'พบข้อมูลที่ซ้ำกัน อาจทำให้ตัวเลขคลาดเคลื่อน' },
+}
+
+const qualityToneClass = {
+  success: 'text-ink',
+  warning: 'text-warning',
+  danger: 'text-danger',
 }
 
 const deleteMutation = useMutation({
@@ -99,6 +106,24 @@ function downloadCsv() {
   toast.success('ดาวน์โหลดไฟล์ CSV แล้ว')
 }
 
+async function assignIndustry(industryId: string | null) {
+  if (!source.value || assigningIndustry.value) return
+  assigningIndustry.value = true
+  try {
+    await setSourceIndustry(source.value.id, industryId)
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['source', sourceId.value] }),
+      queryClient.invalidateQueries({ queryKey: ['sources'] }),
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] }),
+    ])
+    toast.success(industryId ? 'อัปเดตอุตสาหกรรมแล้ว' : 'นำไฟล์ออกจากอุตสาหกรรมแล้ว')
+  } catch {
+    toast.error('อัปเดตอุตสาหกรรมไม่สำเร็จ', 'กรุณาลองใหม่อีกครั้ง')
+  } finally {
+    assigningIndustry.value = false
+  }
+}
+
 function askAiAboutDataset() {
   if (!source.value) return
   const prompt = `ช่วยสรุปภาพรวมและจุดสังเกตสำคัญจากชุดข้อมูล "${source.value.name}" (${source.value.fileName}) หน่อยครับ`
@@ -129,25 +154,47 @@ function askAiAboutDataset() {
       :title="source.name"
       :description="`${source.fileName} · ข้อมูลช่วง ${source.period} · อัปเดตล่าสุด ${timeAgo(source.updatedAt)}`"
     >
+      <template #leading>
+        <button
+          type="button"
+          class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#f4f5f7] text-ink-soft transition hover:bg-[#eceef1] hover:text-ink"
+          aria-label="แหล่งข้อมูลทั้งหมด"
+          title="แหล่งข้อมูลทั้งหมด"
+          @click="router.navigate({ to: '/app/data-sources' })"
+        >
+          <ArrowLeft class="h-4 w-4" aria-hidden="true" />
+        </button>
+      </template>
       <template #actions>
-        <AppButton variant="secondary" @click="router.navigate({ to: '/app/data-sources' })">
-          <template #left>
-            <ArrowLeft class="h-4 w-4" aria-hidden="true" />
-          </template>
-          แหล่งข้อมูลทั้งหมด
-        </AppButton>
-        <AppButton variant="secondary" @click="downloadCsv">
-          <template #left>
-            <Download class="h-4 w-4" aria-hidden="true" />
-          </template>
-          ดาวน์โหลด CSV
-        </AppButton>
+        <IndustryPicker
+          :model-value="source.industryId ?? null"
+          :disabled="assigningIndustry"
+          @update:model-value="assignIndustry"
+        />
+        <button
+          type="button"
+          class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#f4f5f7] text-ink-soft transition hover:bg-[#eceef1] hover:text-ink"
+          aria-label="ดาวน์โหลด CSV"
+          title="ดาวน์โหลด CSV"
+          @click="downloadCsv"
+        >
+          <Download class="h-4 w-4" aria-hidden="true" />
+        </button>
         <AppButton @click="askAiAboutDataset">
           <template #left>
             <Sparkles class="h-4 w-4" aria-hidden="true" />
           </template>
           ถาม AI ถึงชุดข้อมูลนี้
         </AppButton>
+        <button
+          type="button"
+          class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#f4f5f7] text-rose-600 transition hover:bg-rose-100 hover:text-rose-700"
+          aria-label="ลบชุดข้อมูล"
+          title="ลบชุดข้อมูล"
+          @click="deleteModalOpen = true"
+        >
+          <Trash2 class="h-4 w-4" aria-hidden="true" />
+        </button>
       </template>
     </PageHeader>
 
@@ -164,10 +211,13 @@ function askAiAboutDataset() {
       <div class="card-fade p-4">
         <div class="relative z-10 flex h-full flex-col justify-between">
           <dt class="text-[11.5px] font-medium text-ink-soft">สถานะคุณภาพ</dt>
-          <dd class="mt-3 flex items-center gap-1.5">
-            <AppBadge :tone="qualityMeta[source.quality].tone">
+          <dd class="mt-3">
+            <span :class="['block text-[18px] font-semibold leading-tight', qualityToneClass[qualityMeta[source.quality].tone]]">
               {{ qualityMeta[source.quality].label }}
-            </AppBadge>
+            </span>
+            <span class="mt-1 block text-[11px] leading-relaxed text-muted">
+              {{ qualityMeta[source.quality].desc }}
+            </span>
           </dd>
         </div>
       </div>
@@ -196,7 +246,6 @@ function askAiAboutDataset() {
           <div>
             <div class="flex items-center gap-2">
               <h2 class="text-[17px] font-bold text-ink">ตัวอย่างข้อมูล (Row Preview)</h2>
-              <AppBadge v-if="source.isDemo" tone="warning">ข้อมูลตัวอย่าง</AppBadge>
             </div>
             <p class="text-[12.5px] text-muted">แสดงข้อมูลตัวอย่างที่ ROOKAR ใช้วิเคราะห์และส่งต่อให้ AI</p>
           </div>
@@ -250,19 +299,10 @@ function askAiAboutDataset() {
         </div>
 
         <!-- Bottom Controls -->
-        <div class="flex items-center justify-between pt-2">
+        <div class="pt-2">
           <p class="text-xs text-muted">
             แสดง {{ filteredRows.length }} จาก {{ tableData?.rows.length ?? 0 }} แถวตัวอย่าง
           </p>
-
-          <button
-            type="button"
-            class="flex items-center gap-1.5 text-xs font-semibold text-rose-600 hover:text-rose-700 transition"
-            @click="deleteModalOpen = true"
-          >
-            <Trash2 class="h-3.5 w-3.5" />
-            ลบชุดข้อมูลนี้
-          </button>
         </div>
       </div>
     </div>

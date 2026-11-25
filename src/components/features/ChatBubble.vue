@@ -1,14 +1,20 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import {
+  AlertCircle,
   Check,
   CheckSquare,
   Copy,
   FileSpreadsheet,
+  Loader2,
+  Pencil,
+  RefreshCw,
   ShieldAlert,
   ThumbsDown,
   ThumbsUp,
 } from '@lucide/vue'
+import MarkdownText from '@/components/ui/MarkdownText.vue'
+import { parseMarkdown } from '@/lib/markdown'
 import { formatTime } from '@/lib/format'
 import { cn } from '@/lib/cn'
 import type { ChatMessage } from '@/types'
@@ -20,6 +26,8 @@ const props = defineProps<{
 const emit = defineEmits<{
   feedback: [value: 'up' | 'down' | null]
   copy: [text: string]
+  edit: [id: string, content: string]
+  retry: [id: string]
 }>()
 
 const isAssistant = computed(() => props.message.role === 'assistant')
@@ -27,44 +35,52 @@ const hasContent = computed(() => props.message.content.trim().length > 0)
 const citations = computed(() => props.message.citations ?? [])
 const showActionPlan = ref(false)
 const checklist = ref<{ id: string; text: string; done: boolean }[]>([])
+const editing = ref(false)
+const draft = ref('')
 
-const blocks = computed(() => {
-  const result: { type: 'paragraph' | 'list'; text?: string; items?: string[] }[] = []
-  let list: string[] | null = null
+const specialistLabels: Record<string, string> = {
+  general: 'ภาพรวม (All)',
+  finance: 'การเงิน & ต้นทุน',
+  market: 'ตลาด & GDP',
+  strategy: 'กลยุทธ์ & ราคา',
+  planning: 'แผนธุรกิจ (Planning)',
+}
 
-  for (const rawLine of props.message.content.split('\n')) {
-    const line = rawLine.trim()
-    if (!line) {
-      list = null
-      continue
-    }
-    if (/^[•\-]\s*/.test(line)) {
-      if (!list) {
-        list = []
-        result.push({ type: 'list', items: list })
-      }
-      list.push(line.replace(/^[•\-]\s*/, ''))
-      continue
-    }
-    list = null
-    result.push({ type: 'paragraph', text: line })
-  }
-
-  return result
+const attribution = computed(() => {
+  if (props.message.answeredBy) return props.message.answeredBy
+  const role = specialistLabels[props.message.specialistRole ?? 'general'] ?? 'ภาพรวม (All)'
+  if (role !== 'ภาพรวม (All)') return role
+  return props.message.agentNames?.filter(Boolean)[0] ?? role
 })
 
-const hasListItems = computed(() =>
-  blocks.value.some((b) => b.type === 'list' && b.items && b.items.length > 0),
-)
+function startEdit() {
+  draft.value = props.message.content
+  editing.value = true
+}
+
+function cancelEdit() {
+  editing.value = false
+  draft.value = ''
+}
+
+function saveEdit() {
+  const next = draft.value.trim()
+  if (!next) return
+  emit('edit', props.message.id, next)
+  editing.value = false
+  draft.value = ''
+}
+
+const hasListItems = computed(() => /^[-*•]\s+/m.test(props.message.content))
 
 function toggleActionPlan() {
   if (checklist.value.length === 0) {
     const items: { id: string; text: string; done: boolean }[] = []
     let idx = 0
-    for (const b of blocks.value) {
-      if (b.type === 'list' && b.items) {
-        for (const item of b.items) {
-          items.push({ id: `item_${idx++}`, text: item, done: false })
+    for (const block of parseMarkdown(props.message.content)) {
+      if (block.type === 'list') {
+        for (const item of block.items) {
+          items.push({ id: `item_${idx++}`, text: item.map((token) => token.text).join(''), done: false })
         }
       }
     }
@@ -94,17 +110,63 @@ function toggleFeedback(value: 'up' | 'down') {
             isAssistant
               ? 'text-ink-soft'
               : 'rounded-[20px] bg-ink-100 px-4 py-2.5 text-ink',
-            message.error && 'rounded-xl bg-danger-soft px-4 py-3 text-danger',
+            message.error && !hasContent && 'rounded-xl bg-danger-soft px-4 py-3 text-danger',
           )
         "
       >
-        <template v-if="hasContent">
-          <template v-for="(block, index) in blocks" :key="index">
-            <p v-if="block.type === 'paragraph'" class="break-words">{{ block.text }}</p>
-            <ul v-else class="list-disc space-y-1.5 pl-5 marker:text-muted">
-              <li v-for="item in block.items" :key="item" class="break-words">{{ item }}</li>
-            </ul>
-          </template>
+        <div v-if="isAssistant && hasContent" class="mb-1.5 flex items-center gap-1.5">
+          <span class="inline-flex max-w-full items-center rounded-full bg-surface px-2 py-0.5 text-[10.5px] font-semibold text-ink-soft">
+            ตอบโดย {{ attribution }}
+          </span>
+        </div>
+
+        <div v-if="isAssistant && message.toolEvents?.length" class="mb-2 flex flex-wrap gap-1.5">
+          <span
+            v-for="tool in message.toolEvents"
+            :key="tool.id || tool.name"
+            class="inline-flex max-w-full items-center gap-1 rounded-full bg-surface px-2 py-1 text-[10.5px] font-medium text-ink-soft"
+            :title="tool.summary || tool.label || tool.name"
+          >
+            <Loader2 v-if="tool.status === 'running'" class="h-3 w-3 shrink-0 animate-spin text-muted" aria-hidden="true" />
+            <AlertCircle v-else-if="tool.status === 'error'" class="h-3 w-3 shrink-0 text-danger" aria-hidden="true" />
+            <Check v-else class="h-3 w-3 shrink-0 text-ink" aria-hidden="true" />
+            <span class="whitespace-nowrap">{{ tool.label || tool.name }}</span>
+            <span v-if="tool.status === 'done' && tool.summary" class="max-w-[220px] truncate text-muted">
+              · {{ tool.summary }}
+            </span>
+          </span>
+        </div>
+
+        <template v-if="!isAssistant && editing">
+          <textarea
+            v-model="draft"
+            rows="2"
+            class="w-full min-w-[240px] resize-none rounded-xl bg-white/75 px-3 py-2 text-[13px] leading-relaxed text-ink focus:outline-none"
+            aria-label="แก้ไขข้อความ"
+            @keydown.enter.exact.prevent="saveEdit"
+            @keydown.esc="cancelEdit"
+          />
+          <div class="mt-2 flex items-center justify-end gap-1.5">
+            <button
+              type="button"
+              class="rounded-full px-2.5 py-1 text-[11px] font-medium text-muted transition hover:bg-white/70 hover:text-ink"
+              @click="cancelEdit"
+            >
+              ยกเลิก
+            </button>
+            <button
+              type="button"
+              class="rounded-full bg-ink px-3 py-1 text-[11px] font-semibold text-white transition hover:bg-black disabled:opacity-40"
+              :disabled="!draft.trim()"
+              @click="saveEdit"
+            >
+              บันทึก
+            </button>
+          </div>
+        </template>
+
+        <template v-else-if="hasContent">
+          <MarkdownText :content="message.content" />
           <span
             v-if="message.streaming"
             class="ml-0.5 inline-block h-3.5 w-1 animate-pulse rounded-[1px] bg-brand-500 align-[-1px]"
@@ -115,6 +177,15 @@ function toggleFeedback(value: 'up' | 'down') {
           <span class="h-1.5 w-1.5 animate-bounce rounded-full bg-brand-500 [animation-delay:0ms]" />
           <span class="h-1.5 w-1.5 animate-bounce rounded-full bg-brand-500 [animation-delay:120ms]" />
           <span class="h-1.5 w-1.5 animate-bounce rounded-full bg-brand-500 [animation-delay:240ms]" />
+        </div>
+
+        <div
+          v-if="message.error && hasContent"
+          class="mt-2 flex items-start gap-1.5 rounded-xl bg-danger-soft/60 px-3 py-2 text-[11.5px] leading-relaxed text-danger"
+          role="alert"
+        >
+          <AlertCircle class="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+          <span>{{ message.errorMessage || 'การตอบถูกขัดจังหวะ กรุณาลองส่งคำถามอีกครั้ง' }}</span>
         </div>
 
         <div v-if="isAssistant && citations.length" class="mt-4">
@@ -179,6 +250,18 @@ function toggleFeedback(value: 'up' | 'down') {
         "
       >
         <span>{{ formatTime(message.createdAt) }}</span>
+        <template v-if="!isAssistant && !editing">
+          <span class="mx-0.5 text-ink-200">·</span>
+          <button
+            type="button"
+            class="inline-flex h-7 w-7 items-center justify-center rounded-full transition hover:bg-brand-50 hover:text-brand-700 focus-visible:bg-brand-50 focus-visible:text-brand-700"
+            aria-label="แก้ไขข้อความ"
+            title="แก้ไขข้อความ"
+            @click="startEdit"
+          >
+            <Pencil class="h-3.5 w-3.5" aria-hidden="true" />
+          </button>
+        </template>
         <template v-if="isAssistant && !message.streaming && hasContent">
           <span class="mx-0.5 text-ink-200">·</span>
           <!-- Multi-output button: แปลงเป็น Action Plan -->
@@ -202,6 +285,15 @@ function toggleFeedback(value: 'up' | 'down') {
             @click="emit('copy', message.content)"
           >
             <Copy class="h-3.5 w-3.5" aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            class="inline-flex h-7 w-7 items-center justify-center rounded-full transition hover:bg-brand-50 hover:text-brand-700 focus-visible:bg-brand-50 focus-visible:text-brand-700"
+            aria-label="สร้างคำตอบใหม่"
+            title="สร้างคำตอบใหม่"
+            @click="emit('retry', message.id)"
+          >
+            <RefreshCw class="h-3.5 w-3.5" aria-hidden="true" />
           </button>
           <button
             type="button"

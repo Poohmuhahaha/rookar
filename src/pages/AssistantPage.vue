@@ -15,7 +15,7 @@ import {
   PanelRightOpen,
   Paperclip,
   Rocket,
-  Settings as SettingsIcon,
+  SendHorizontal,
   ShieldCheck,
   SlidersHorizontal,
   Sparkles,
@@ -27,15 +27,25 @@ import {
   Plus,
   Lightbulb,
 } from '@lucide/vue'
+import {
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuPortal,
+  DropdownMenuRoot,
+  DropdownMenuTrigger,
+} from 'reka-ui'
 import AppModal from '@/components/ui/AppModal.vue'
 import AppSheet from '@/components/ui/AppSheet.vue'
 import ChatBubble from '@/components/features/ChatBubble.vue'
 import ChatHistory from '@/components/features/ChatHistory.vue'
+import AgentAvatar from '@/components/ui/AgentAvatar.vue'
+import { conversationAgents } from '@/lib/conversationAgents'
 import WelcomeMark from '@/components/brand/WelcomeMark.vue'
 import AgentVaultModal from '@/components/features/AgentVaultModal.vue'
 import { agentsList, isAgentAllowedInChat } from '@/lib/agentVault'
 import { getIndustryProfile } from '@/lib/industries'
 import { industryFocus } from '@/lib/industryFocus'
+import { locale } from '@/lib/i18n'
 import { createConversation, createMessage, getConversations, getSession, listSources, saveConversations, streamAiReply } from '@/lib/mockApi'
 import { formatNumber, timeAgo } from '@/lib/format'
 import { useToast } from '@/lib/toast'
@@ -132,6 +142,39 @@ function roleFromConversation(role?: SpecialistType): SpecialistRole {
 
 function roleForConversation(role: SpecialistRole | null): SpecialistType {
   return role && role !== 'all' ? role : 'general'
+}
+
+function pickLeadAgent(question: string, specialist: SpecialistType) {
+  const enabled = activeBoardroomAgents.value.filter((agent) => agent.enabled)
+  if (enabled.length === 0) return null
+
+  const categoryBySpecialist: Record<SpecialistType, string | null> = {
+    finance: 'finance',
+    market: 'market',
+    strategy: 'strategy',
+    planning: 'operations',
+    general: null,
+  }
+  const targetCategory = categoryBySpecialist[specialist]
+  if (targetCategory) {
+    const match = enabled.find((agent) => agent.category === targetCategory)
+    if (match) return match
+  }
+
+  const normalized = question.toLowerCase()
+  const keywordCategories: { category: string; keywords: string[] }[] = [
+    { category: 'finance', keywords: ['ต้นทุน', 'กำไร', 'เงินสด', 'margin', 'cfo', 'การเงิน'] },
+    { category: 'market', keywords: ['ตลาด', 'gdp', 'เศรษฐกิจ', 'เงินเฟ้อ', 'คู่แข่ง', 'cmo'] },
+    { category: 'strategy', keywords: ['ราคา', 'เมนู', 'โปรโมชัน', 'bundle', 'pricing'] },
+    { category: 'operations', keywords: ['แผน', 'ปฏิบัติการ', 'กระบวนการ', 'ทีมงาน', 'operation'] },
+  ]
+  for (const item of keywordCategories) {
+    if (item.keywords.some((keyword) => normalized.includes(keyword))) {
+      const match = enabled.find((agent) => agent.category === item.category)
+      if (match) return match
+    }
+  }
+  return enabled[0]
 }
 
 function roleLabel(role?: SpecialistType) {
@@ -292,10 +335,25 @@ watch(composer, () => {
   })
 })
 
+watch(
+  () => messages.value.length,
+  () => scrollToBottomSoon(),
+)
+
 function scrollToBottom() {
   const element = messageList.value
   if (!element) return
   element.scrollTop = element.scrollHeight
+}
+
+function scrollToBottomSoon() {
+  void nextTick(() => {
+    scrollToBottom()
+    window.requestAnimationFrame(() => {
+      scrollToBottom()
+      window.setTimeout(scrollToBottom, 80)
+    })
+  })
 }
 
 function queueScroll() {
@@ -323,7 +381,7 @@ function selectConversation(conversation: Conversation) {
   roleModalOpen.value = false
   chatPickerOpen.value = false
   messages.value = cloneMessages(conversation.messages)
-  nextTick(scrollToBottom)
+  scrollToBottomSoon()
 }
 
 function resetChatView() {
@@ -371,6 +429,13 @@ function syncConversation(conversationId: string) {
   if (!conversation) return
   conversation.messages = cloneMessages(messages.value)
   conversation.specialistRole = roleForConversation(activeSpecialist.value)
+  conversation.agentNames = [
+    ...new Set(
+      messages.value
+        .filter((message) => message.role === 'assistant')
+        .flatMap((message) => (message.answeredBy ? [message.answeredBy] : message.agentNames ?? [])),
+    ),
+  ].slice(0, 6)
   const lastAnswer = [...messages.value]
     .reverse()
     .find((message) => message.role === 'assistant' && message.content.trim())
@@ -409,6 +474,82 @@ function handleFileChange(event: Event) {
 
 function removeAttachment() {
   attachedFile.value = null
+}
+
+type StreamRunOptions = {
+  question: string
+  answerIndex: number
+  specialist: SpecialistType
+  agentIds: string[]
+  history: { role: 'user' | 'assistant'; content: string }[]
+  attachment: { name: string; content: string } | null
+  conversationId: string | null
+}
+
+async function runStream(options: StreamRunOptions) {
+  isStreaming.value = true
+  stopRequested.value = false
+  streamController = new AbortController()
+  scrollToBottomSoon()
+
+  try {
+    for await (const event of streamAiReply(options.question, {
+      industryId: industryFocus.value,
+      language: locale.value,
+      specialistRole: options.specialist,
+      agentIds: options.agentIds,
+      history: options.history,
+      attachment: options.attachment,
+      conversationId: options.conversationId ?? undefined,
+      signal: streamController.signal,
+    })) {
+      if (stopRequested.value) break
+      if (event.type === 'token') {
+        messages.value[options.answerIndex].content += event.value ?? ''
+        queueScroll()
+      } else if (event.type === 'citation' && event.citation) {
+        messages.value[options.answerIndex].citations?.push(event.citation)
+        queueScroll()
+      } else if (event.type === 'tool_start' || event.type === 'tool_result') {
+        const answer = messages.value[options.answerIndex]
+        if (answer && event.tool) {
+          answer.toolEvents ??= []
+          const key = event.tool.id || event.tool.name || String(answer.toolEvents.length)
+          const existingIndex = answer.toolEvents.findIndex((tool) => (tool.id || tool.name) === key)
+          const next = { ...event.tool }
+          if (existingIndex >= 0) answer.toolEvents[existingIndex] = next
+          else answer.toolEvents.push(next)
+          queueScroll()
+        }
+      } else if (event.type === 'error') {
+        throw new Error(event.message ?? 'AI ไม่สามารถตอบได้ในขณะนี้')
+      }
+    }
+  } catch (error) {
+    const answer = messages.value[options.answerIndex]
+    if (answer && !stopRequested.value && !streamController?.signal.aborted) {
+      answer.error = true
+      answer.errorMessage = error instanceof Error ? error.message : 'กรุณาลองใหม่'
+      if (!answer.content.trim()) {
+        answer.content = 'ขออภัยครับ ระบบไม่สามารถสร้างคำตอบได้ในขณะนี้ กรุณาลองถามอีกครั้ง'
+      }
+      toast.error('AI ตอบไม่สำเร็จ', answer.errorMessage)
+    }
+  } finally {
+    const answer = messages.value[options.answerIndex]
+    if (answer) {
+      if (stopRequested.value && !answer.content.trim()) {
+        answer.content = 'หยุดการตอบแล้ว'
+      }
+      answer.streaming = false
+    }
+    isStreaming.value = false
+    stopRequested.value = false
+    streamController = null
+    if (options.conversationId) syncConversation(options.conversationId)
+    else saveConversations(history.value)
+    scrollToBottomSoon()
+  }
 }
 
 async function send(rawQuestion: string) {
@@ -456,59 +597,135 @@ async function send(rawQuestion: string) {
   userMessage.specialistRole = specialist
   const assistantMessage = createMessage('assistant')
   assistantMessage.specialistRole = specialist
+  const leadAgent = pickLeadAgent(question, specialist)
+  assistantMessage.agentNames = activeBoardroomAgents.value
+    .filter((agent) => agent.enabled)
+    .map((agent) => agent.name)
+  assistantMessage.answeredBy = leadAgent?.name
   messages.value.push(userMessage)
   messages.value.push(assistantMessage)
   const answerIndex = messages.value.length - 1
-  isStreaming.value = true
-  stopRequested.value = false
-  streamController = new AbortController()
-  await nextTick()
-  scrollToBottom()
 
-  try {
-    for await (const event of streamAiReply(question, {
-      industryId: industryFocus.value,
-      specialistRole: specialist,
-      agentIds,
-      history: historyPayload,
-      attachment: attachmentPayload,
-      signal: streamController.signal,
-    })) {
-      if (stopRequested.value) break
-      if (event.type === 'token') {
-        messages.value[answerIndex].content += event.value ?? ''
-        queueScroll()
-      } else if (event.type === 'citation' && event.citation) {
-        messages.value[answerIndex].citations?.push(event.citation)
-        queueScroll()
-      } else if (event.type === 'error') {
-        throw new Error(event.message ?? 'AI ไม่สามารถตอบได้ในขณะนี้')
-      }
-    }
-  } catch (error) {
-    const answer = messages.value[answerIndex]
-    if (!stopRequested.value && !streamController?.signal.aborted) {
-      answer.error = true
-      if (!answer.content.trim()) {
-        answer.content = 'ขออภัยครับ ระบบไม่สามารถสร้างคำตอบได้ในขณะนี้ กรุณาลองถามอีกครั้ง'
-      }
-      toast.error('AI ตอบไม่สำเร็จ', error instanceof Error ? error.message : 'กรุณาลองใหม่')
-    }
-  } finally {
-    const answer = messages.value[answerIndex]
-    if (answer) {
-      if (stopRequested.value && !answer.content.trim()) {
-        answer.content = 'หยุดการตอบแล้ว'
-      }
-      answer.streaming = false
-    }
-    isStreaming.value = false
-    stopRequested.value = false
-    streamController = null
-    syncConversation(conversationId)
-    await nextTick()
-    scrollToBottom()
+  await runStream({
+    question,
+    answerIndex,
+    specialist,
+    agentIds,
+    history: historyPayload,
+    attachment: attachmentPayload,
+    conversationId: conversationId ?? null,
+  })
+}
+
+async function regenerateFromUserIndex(index: number) {
+  const userMessage = messages.value[index]
+  if (!userMessage || userMessage.role !== 'user') return
+  const question = userMessage.content.trim()
+  if (!question) return
+
+  messages.value.splice(index + 1)
+
+  const specialist = userMessage.specialistRole ?? roleForConversation(activeSpecialist.value)
+  activeSpecialist.value = roleFromConversation(specialist)
+
+  let conversationId = activeId.value
+  if (!conversationId) {
+    const conversation = createConversation(question.slice(0, 56))
+    conversation.specialistRole = specialist
+    history.value.unshift(conversation)
+    activeId.value = conversation.id
+    conversationId = conversation.id
+    void router.navigate({ to: '/app/assistant', search: { chat: conversationId }, replace: true })
   }
+
+  const historyPayload = messages.value
+    .slice(0, index)
+    .filter((message) => message.content.trim() && !message.error && !message.streaming)
+    .slice(-12)
+    .map((message) => ({ role: message.role, content: message.content }))
+  const agentIds = activeBoardroomAgents.value
+    .filter((agent) => agent.enabled)
+    .map((agent) => agent.id)
+    .slice(0, 6)
+
+  const assistantMessage = createMessage('assistant')
+  assistantMessage.specialistRole = specialist
+  const leadAgent = pickLeadAgent(question, specialist)
+  assistantMessage.agentNames = activeBoardroomAgents.value
+    .filter((agent) => agent.enabled)
+    .map((agent) => agent.name)
+  assistantMessage.answeredBy = leadAgent?.name
+  messages.value.push(assistantMessage)
+  const answerIndex = messages.value.length - 1
+
+  await runStream({
+    question,
+    answerIndex,
+    specialist,
+    agentIds,
+    history: historyPayload,
+    attachment: null,
+    conversationId: conversationId ?? null,
+  })
+}
+
+async function handleEditMessage(id: string, content: string) {
+  if (isStreaming.value) {
+    toast.info('กำลังสร้างคำตอบ', 'กดหยุดคำตอบก่อนแก้ไขข้อความ')
+    return
+  }
+  const index = messages.value.findIndex((item) => item.id === id && item.role === 'user')
+  if (index < 0) return
+  const edited = messages.value[index]
+  const next = content.trim()
+  if (!next || next === edited.content) return
+
+  edited.content = next
+  toast.success('แก้ไขข้อความแล้ว', 'กำลังสร้างคำตอบใหม่')
+  await regenerateFromUserIndex(index)
+}
+
+function handleRetryAnswer(assistantId: string) {
+  if (isStreaming.value) {
+    toast.info('กำลังสร้างคำตอบ', 'กดหยุดคำตอบก่อนสร้างใหม่')
+    return
+  }
+  const assistantIndex = messages.value.findIndex((item) => item.id === assistantId)
+  if (assistantIndex < 0 || messages.value[assistantIndex].role !== 'assistant') return
+
+  let userIndex = -1
+  for (let index = assistantIndex - 1; index >= 0; index -= 1) {
+    if (messages.value[index].role === 'user') {
+      userIndex = index
+      break
+    }
+  }
+  if (userIndex < 0) return
+  toast.success('กำลังสร้างคำตอบใหม่')
+  void regenerateFromUserIndex(userIndex)
+}
+
+function deleteConversation(conversation: Conversation) {
+  if (isStreaming.value && activeId.value === conversation.id) {
+    toast.info('กำลังสร้างคำตอบ', 'กดหยุดคำตอบก่อนลบแชท')
+    return
+  }
+  history.value = history.value.filter((item) => item.id !== conversation.id)
+  if (activeId.value === conversation.id) {
+    activeId.value = null
+    messages.value = []
+    activeSpecialist.value = null
+    const next = history.value[0]
+    if (next) {
+      selectConversation(next)
+      void router.navigate({ to: '/app/assistant', search: { chat: next.id }, replace: true })
+    } else {
+      void router.navigate({ to: '/app/assistant', search: { chat: 'new' }, replace: true })
+    }
+  }
+  saveConversations(history.value)
+  void queryClient.invalidateQueries({ queryKey: ['conversations'] })
+  toast.success('ลบแชทแล้ว')
 }
 
 function chooseConversation(conversation: Conversation) {
@@ -558,10 +775,6 @@ function toggleVoiceInput() {
   }
 }
 
-function openComposerSettings() {
-  void router.navigate({ to: '/app/settings' })
-}
-
 function handleKeydown(event: KeyboardEvent) {
   if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
     event.preventDefault()
@@ -594,26 +807,6 @@ async function copyMessage(text: string) {
     class="relative flex min-w-0 flex-1 flex-col bg-white"
     :class="messages.length === 0 ? 'overflow-y-auto' : 'overflow-hidden'"
   >
-    <!-- Top Left: Multi-Agent Boardroom & Vault trigger -->
-    <div class="absolute left-14 top-3 z-20 flex items-center gap-2 transition-all duration-200 lg:left-4">
-      <button
-        type="button"
-        class="inline-flex items-center gap-1.5 rounded-full bg-[#f4f5f7] px-2.5 py-1 text-xs font-medium text-ink transition hover:bg-[#eceef1]"
-        @click="openVaultGeneral"
-      >
-        <Users class="h-3.5 w-3.5 text-muted" />
-        <span>ทีม AI ({{ activeBoardroomAgents.length }})</span>
-      </button>
-      <button
-        type="button"
-        class="inline-flex items-center gap-1.5 rounded-full bg-[#f4f5f7] px-2.5 py-1 text-xs font-medium text-ink transition hover:bg-[#eceef1]"
-        @click="openChatPicker"
-      >
-        <History class="h-3.5 w-3.5 text-muted" />
-        <span>เลือกแชท</span>
-      </button>
-    </div>
-
     <button
       type="button"
       class="absolute right-3 top-3 z-20 inline-flex h-9 w-9 items-center justify-center rounded-full bg-[#f4f5f7] text-ink transition hover:bg-[#eceef1] xl:hidden"
@@ -681,6 +874,8 @@ async function copyMessage(text: string) {
           :message="message"
           @feedback="(value) => handleFeedback(message.id, value)"
           @copy="copyMessage"
+          @edit="handleEditMessage"
+          @retry="handleRetryAnswer"
         />
       </div>
     </div>
@@ -707,7 +902,7 @@ async function copyMessage(text: string) {
           </button>
         </div>
 
-        <div class="card-fade-static p-3">
+        <div class="rounded-[24px] bg-surface p-3">
           <div
             v-if="attachedFile"
             class="mb-2 flex items-center gap-2 rounded-full bg-white px-3.5 py-1.5 text-[11.5px] text-ink-soft"
@@ -739,10 +934,26 @@ async function copyMessage(text: string) {
               @keydown="handleKeydown"
             />
           </div>
-          <div class="mt-2.5 flex items-center gap-2">
+          <div class="mt-2.5 flex flex-wrap items-center gap-1.5 sm:gap-2">
             <button
               type="button"
-              class="inline-flex h-8.5 items-center gap-1.5 rounded-full bg-white px-3.5 text-[11.5px] font-medium text-ink-soft transition hover:bg-neutral-100 hover:text-ink focus-visible:bg-neutral-100 focus-visible:text-ink disabled:pointer-events-none disabled:opacity-45"
+              class="inline-flex h-8.5 items-center gap-1.5 whitespace-nowrap rounded-full bg-white px-3 text-[11.5px] font-medium text-ink-soft transition hover:bg-neutral-100 hover:text-ink sm:px-3.5"
+              @click="openVaultGeneral"
+            >
+              <Users class="h-3.5 w-3.5 text-muted" aria-hidden="true" />
+              <span>ทีม AI ({{ activeBoardroomAgents.length }})</span>
+            </button>
+            <button
+              type="button"
+              class="inline-flex h-8.5 items-center gap-1.5 whitespace-nowrap rounded-full bg-white px-3 text-[11.5px] font-medium text-ink-soft transition hover:bg-neutral-100 hover:text-ink sm:px-3.5"
+              @click="openChatPicker"
+            >
+              <History class="h-3.5 w-3.5 text-muted" aria-hidden="true" />
+              <span>เลือกแชท</span>
+            </button>
+            <button
+              type="button"
+              class="inline-flex h-8.5 items-center gap-1.5 whitespace-nowrap rounded-full bg-white px-3 text-[11.5px] font-medium text-ink-soft transition hover:bg-neutral-100 hover:text-ink focus-visible:bg-neutral-100 focus-visible:text-ink disabled:pointer-events-none disabled:opacity-45 sm:px-3.5"
               :disabled="!activeSpecialist || isStreaming"
               aria-label="แนบไฟล์"
               @click="pickFile"
@@ -757,60 +968,70 @@ async function copyMessage(text: string) {
               accept=".csv"
               @change="handleFileChange"
             />
-            <button
-              type="button"
-              class="inline-flex h-8.5 items-center gap-1.5 rounded-full bg-ink-50/90 px-3.5 text-[11.5px] font-medium text-ink-soft transition hover:bg-ink-100 hover:text-ink focus-visible:bg-ink-100 focus-visible:text-ink"
-              aria-label="ตั้งค่า AI"
-              @click="openComposerSettings"
-            >
-              <SettingsIcon class="h-3.5 w-3.5" aria-hidden="true" />
-              ตั้งค่า
-            </button>
-            <button
-              type="button"
-              class="inline-flex h-8.5 items-center gap-1.5 rounded-full bg-ink-50/90 px-3.5 text-[11.5px] font-medium text-ink-soft transition hover:bg-ink-100 hover:text-ink focus-visible:bg-ink-100 focus-visible:text-ink"
-              aria-label="บริบท AI"
-              @click="contextOpen = true"
-            >
-              <SlidersHorizontal class="h-3.5 w-3.5" aria-hidden="true" />
-              บริบท AI
-            </button>
+            <DropdownMenuRoot>
+              <DropdownMenuTrigger as-child>
+                <button
+                  type="button"
+                  class="inline-flex h-8.5 w-8.5 items-center justify-center rounded-full bg-white text-ink-soft transition hover:bg-neutral-100 hover:text-ink focus-visible:bg-neutral-100 focus-visible:text-ink"
+                  aria-label="ตัวเลือกเพิ่มเติม"
+                  title="ตัวเลือกเพิ่มเติม"
+                >
+                  <Plus class="h-4 w-4" aria-hidden="true" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuPortal>
+                <DropdownMenuContent
+                  side="bottom"
+                  align="start"
+                  :side-offset="8"
+                  class="z-[70] min-w-[190px] rounded-2xl bg-surface p-1.5 focus:outline-none"
+                >
+                  <DropdownMenuItem
+                    class="flex cursor-pointer select-none items-center gap-2 rounded-xl px-3 py-2.5 text-[12px] font-medium text-ink outline-none transition data-[highlighted]:bg-neutral-100"
+                    @select="contextOpen = true"
+                  >
+                    <SlidersHorizontal class="h-4 w-4 text-muted" aria-hidden="true" />
+                    บริบท AI
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenuPortal>
+            </DropdownMenuRoot>
 
-            <div class="flex-1" />
+            <div class="ml-auto flex shrink-0 items-center gap-1.5 sm:gap-2">
+              <button
+                type="button"
+                :class="[
+                  'inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition-colors disabled:pointer-events-none disabled:opacity-40',
+                  isListening ? 'bg-rose-500 text-white' : 'text-muted hover:bg-neutral-200 hover:text-ink'
+                ]"
+                :disabled="!activeSpecialist"
+                aria-label="คำสั่งเสียง (Voice input)"
+                title="คำสั่งเสียง (Voice input)"
+                @click="toggleVoiceInput"
+              >
+                <Mic class="h-4 w-4" aria-hidden="true" />
+              </button>
 
-            <button
-              type="button"
-              :class="[
-                'inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition-colors disabled:pointer-events-none disabled:opacity-40',
-                isListening ? 'bg-rose-500 text-white' : 'text-muted hover:bg-neutral-200 hover:text-ink'
-              ]"
-              :disabled="!activeSpecialist"
-              aria-label="คำสั่งเสียง (Voice input)"
-              title="คำสั่งเสียง (Voice input)"
-              @click="toggleVoiceInput"
-            >
-              <Mic class="h-4 w-4" aria-hidden="true" />
-            </button>
-
-            <button
-              v-if="isStreaming"
-              type="button"
-              class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-ink-100 text-ink transition hover:bg-ink-200"
-              aria-label="หยุดการตอบ"
-              @click="stopAnswer"
-            >
-              <CircleStop class="h-4 w-4" aria-hidden="true" />
-            </button>
-            <button
-              v-else
-              type="button"
-              class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-ink text-white transition hover:bg-black disabled:bg-ink-100 disabled:text-faint"
-              :disabled="!activeSpecialist || (!composer.trim() && !attachedFile)"
-              aria-label="ส่งคำถาม"
-              @click="send(composer)"
-            >
-              <ArrowUp class="h-4 w-4" aria-hidden="true" />
-            </button>
+              <button
+                v-if="isStreaming"
+                type="button"
+                class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-ink-100 text-ink transition hover:bg-ink-200"
+                aria-label="หยุดการตอบ"
+                @click="stopAnswer"
+              >
+                <CircleStop class="h-4 w-4" aria-hidden="true" />
+              </button>
+              <button
+                v-else
+                type="button"
+                class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-ink text-white transition hover:bg-black disabled:bg-ink-100 disabled:text-faint"
+                :disabled="!activeSpecialist || (!composer.trim() && !attachedFile)"
+                aria-label="ส่งคำถาม"
+                @click="send(composer)"
+              >
+                <ArrowUp class="h-4 w-4" aria-hidden="true" />
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -839,6 +1060,7 @@ async function copyMessage(text: string) {
         @select="chooseConversation"
         @new-chat="newChatFromHistory"
         @close="historyCollapsed = true"
+        @delete="deleteConversation"
       />
     </div>
   </aside>
@@ -916,6 +1138,7 @@ async function copyMessage(text: string) {
       @select="chooseConversation"
       @new-chat="newChatFromHistory"
       @close="historyOpen = false"
+      @delete="deleteConversation"
     />
   </AppSheet>
 
@@ -954,8 +1177,17 @@ async function copyMessage(text: string) {
           class="flex w-full items-start gap-3 rounded-2xl bg-white p-4 text-left ring-1 ring-black/5 transition hover:ring-black/15"
           @click="chooseConversationFromPicker(conversation)"
         >
-          <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-neutral-100 text-ink">
-            <MessageSquare class="h-4 w-4" aria-hidden="true" />
+          <span class="flex h-9 min-w-9 shrink-0 items-center justify-center gap-1 rounded-xl bg-neutral-100 px-1.5 text-ink">
+            <template v-if="conversationAgents(conversation).length">
+              <AgentAvatar
+                v-for="agent in conversationAgents(conversation).slice(0, 2)"
+                :key="agent.name"
+                :name="agent.name"
+                :color="agent.color"
+                size="sm"
+              />
+            </template>
+            <MessageSquare v-else class="h-4 w-4" aria-hidden="true" />
           </span>
           <span class="min-w-0 flex-1">
             <span class="flex items-center gap-2">

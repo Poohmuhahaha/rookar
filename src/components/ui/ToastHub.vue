@@ -10,9 +10,9 @@ const icons = {
 }
 
 const tones = {
-  success: 'text-success',
-  error: 'text-danger',
-  info: 'text-info',
+  success: 'text-emerald-400',
+  error: 'text-red-400',
+  info: 'text-white/80',
 }
 </script>
 
@@ -27,7 +27,7 @@ const tones = {
         <div
           v-for="toast in toasts"
           :key="toast.id"
-          class="pointer-events-auto flex items-start gap-3 rounded-lg bg-surface p-3.5 shadow-float"
+          class="pointer-events-auto flex items-start gap-3 rounded-lg bg-ink p-3.5 text-white shadow-float"
           role="status"
         >
           <component
@@ -36,14 +36,14 @@ const tones = {
             aria-hidden="true"
           />
           <div class="min-w-0 flex-1">
-            <p class="text-[13px] font-medium text-ink">{{ toast.title }}</p>
-            <p v-if="toast.description" class="mt-0.5 text-xs leading-relaxed text-muted">
+            <p class="text-[13px] font-medium text-white">{{ toast.title }}</p>
+            <p v-if="toast.description" class="mt-0.5 text-xs leading-relaxed text-white/70">
               {{ toast.description }}
             </p>
           </div>
           <button
             type="button"
-            class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-faint transition hover:bg-ink-50 hover:text-ink"
+            class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-white/50 transition hover:bg-white/10 hover:text-white"
             aria-label="ปิดการแจ้งเตือน"
             @click="removeToast(toast.id)"
           >

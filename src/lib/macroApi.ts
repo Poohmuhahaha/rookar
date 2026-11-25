@@ -1,4 +1,4 @@
-import type { SectorBenchmark } from '@/types'
+import type { IndustryEconomics, SectorBenchmark } from '@/types'
 import { apiFetch } from './api/client'
 
 export function toThaiYear(year: string): string {
@@ -14,4 +14,10 @@ export async function getMacroBenchmark(options: { force?: boolean } = {}): Prom
 
 export function clearMacroCache() {
   // Cache lives on the server; no-op on the client.
+}
+
+export async function getIndustryEconomics(industry?: string | null): Promise<IndustryEconomics> {
+  const query = industry ? `?industry=${encodeURIComponent(industry)}` : ''
+  const data = await apiFetch<{ economics: IndustryEconomics }>(`/macro/industry${query}`)
+  return data.economics
 }

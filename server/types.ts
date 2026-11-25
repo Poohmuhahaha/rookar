@@ -4,5 +4,6 @@ export type AppEnv = {
   Variables: {
     user: DbUser
     sessionHash: string
+    appUrl: string
   }
 }

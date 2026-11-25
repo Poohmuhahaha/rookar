@@ -2,8 +2,14 @@ import { beforeAll, describe, expect, it } from 'bun:test'
 
 process.env.DATABASE_URL = ':memory:'
 process.env.NODE_ENV = 'test'
+process.env.AI_PROVIDER = 'mock'
+process.env.OPENAI_API_KEY = ''
 
+const { initBunRuntime } = await import('./bunDb')
+initBunRuntime({ databaseUrl: ':memory:', nodeEnv: 'test', aiProvider: 'mock', openaiApiKey: '', allowDevReset: true })
 const { app } = await import('./app')
+const { normalizeIndustryId } = await import('../src/lib/industries')
+const { parseCsv } = await import('./services/imports')
 
 let cookie = ''
 let userId = ''
@@ -20,6 +26,38 @@ function jsonRequest(path: string, body: unknown, method = 'POST') {
   })
 }
 
+async function importCsv(
+  importCookie: string,
+  fileName: string,
+  csv: string,
+  type: string,
+  mapping: Record<string, string>,
+  industryId?: string,
+) {
+  const form = new FormData()
+  form.set('file', new File([csv], fileName, { type: 'text/csv' }))
+  form.set('type', type)
+  const previewResponse = await app.request('/api/imports/preview', {
+    method: 'POST',
+    headers: { Cookie: importCookie, Origin: 'http://localhost:5173' },
+    body: form,
+  })
+  const preview = (await previewResponse.json() as { preview: { previewId: string } }).preview
+  const validate = await app.request(`/api/imports/${preview.previewId}/validate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Cookie: importCookie, Origin: 'http://localhost:5173' },
+    body: JSON.stringify({ mapping }),
+  })
+  expect(validate.status).toBe(200)
+  const commit = await app.request(`/api/imports/${preview.previewId}/commit`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Cookie: importCookie, Origin: 'http://localhost:5173' },
+    body: JSON.stringify({ mapping, industryId }),
+  })
+  expect(commit.status).toBe(200)
+  return commit
+}
+
 const TEST_EMAIL = 'test@rookar.co'
 const TEST_PASSWORD = 'testpassword123'
 
@@ -27,17 +65,12 @@ beforeAll(async () => {
   const signup = await app.request('/api/auth/signup', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Origin: 'http://localhost:5173' },
-    body: JSON.stringify({ name: 'Test User', email: TEST_EMAIL, password: TEST_PASSWORD }),
+    body: JSON.stringify({ name: 'Test User', username: 'testuser', email: TEST_EMAIL, password: TEST_PASSWORD }),
   })
   const setCookie = signup.headers.get('set-cookie') ?? ''
   cookie = setCookie.split(';')[0] ?? ''
   const data = await signup.json() as { session: { user: { id: string } } }
   userId = data.session.user.id
-  await app.request('/api/sources/seed', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:5173' },
-    body: JSON.stringify({ industry: 'fnb' }),
-  })
 })
 
 describe('ROOKAR API', () => {
@@ -48,52 +81,97 @@ describe('ROOKAR API', () => {
     expect(data.session.user.email).toBe(TEST_EMAIL)
   })
 
-  it('returns demo sources and dashboard', async () => {
+  it('starts with an empty workspace', async () => {
     const sourcesResponse = await app.request('/api/sources', { headers: { Cookie: cookie } })
     const sources = await sourcesResponse.json() as { sources: unknown[] }
-    expect(sources.sources).toHaveLength(4)
+    expect(sources.sources).toHaveLength(0)
 
     const dashboardResponse = await app.request('/api/dashboard?range=6m&industry=fnb', { headers: { Cookie: cookie } })
-    const dashboard = await dashboardResponse.json() as { dashboard: { revenue: number; series: unknown[] } }
-    expect(dashboard.dashboard.revenue).toBe(6_248_500)
-    expect(dashboard.dashboard.series).toHaveLength(6)
+    const dashboard = await dashboardResponse.json() as { dashboard: unknown }
+    expect(dashboard.dashboard).toBeNull()
   })
 
-  it('imports a CSV and updates the dashboard', async () => {
+  it('imports real CSV data scoped by industry', async () => {
     const signup = await app.request('/api/auth/signup', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Origin: 'http://localhost:5173' },
-      body: JSON.stringify({ name: 'Import User', email: 'import@example.com', password: 'rookar1234' }),
+      body: JSON.stringify({ name: 'Import User', username: 'importuser', email: 'import@example.com', password: 'rookar1234' }),
     })
     const importCookie = (signup.headers.get('set-cookie') ?? '').split(';')[0] ?? ''
-    const form = new FormData()
-    form.set('file', new File(['วันที่,ยอดขาย\n2026-11-01,1000\n2026-11-02,2000\n'], 'sales.csv', { type: 'text/csv' }))
-    form.set('type', 'sales')
-    const previewResponse = await app.request('/api/imports/preview', {
-      method: 'POST',
-      headers: { Cookie: importCookie, Origin: 'http://localhost:5173' },
-      body: form,
-    })
-    const preview = (await previewResponse.json() as { preview: { previewId: string } }).preview
-    const mapping = { date: 'วันที่', amount: 'ยอดขาย' }
-    const validate = await app.request(`/api/imports/${preview.previewId}/validate`, {
-      method: 'POST',
+    const business = await app.request('/api/business', {
+      method: 'PUT',
       headers: { 'Content-Type': 'application/json', Cookie: importCookie, Origin: 'http://localhost:5173' },
-      body: JSON.stringify({ mapping }),
+      body: JSON.stringify({
+        name: 'Import Cafe',
+        type: 'fnb',
+        typeLabel: 'อาหารและเครื่องดื่ม',
+        employees: '1-5',
+        revenueRange: '1-3 ล้าน',
+        goals: ['เพิ่มยอดขาย'],
+      }),
     })
-    expect(validate.status).toBe(200)
-    const commit = await app.request(`/api/imports/${preview.previewId}/commit`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Cookie: importCookie, Origin: 'http://localhost:5173' },
-      body: JSON.stringify({ mapping }),
-    })
-    expect(commit.status).toBe(200)
+    expect(business.status).toBe(200)
+
+    await importCsv(
+      importCookie,
+      'sales.csv',
+      'วันที่,ยอดขาย,ช่องทางขาย\n2026-11-01,1000,Store\n2026-11-02,2000,Grab\n',
+      'sales',
+      { date: 'วันที่', amount: 'ยอดขาย', channel: 'ช่องทางขาย' },
+    )
+    await importCsv(
+      importCookie,
+      'expenses.csv',
+      'วันที่,หมวดหมู่,จำนวนเงิน\n2026-11-02,ค่าวัตถุดิบกาแฟ,500\n',
+      'expenses',
+      { date: 'วันที่', category: 'หมวดหมู่', amount: 'จำนวนเงิน' },
+    )
+
     const sources = await app.request('/api/sources', { headers: { Cookie: importCookie } })
-    const list = await sources.json() as { sources: { fileName: string }[] }
+    const list = await sources.json() as { sources: { fileName: string; industryId?: string }[] }
     expect(list.sources.some((source) => source.fileName === 'sales.csv')).toBe(true)
-    const dashboard = await app.request('/api/dashboard?range=6m', { headers: { Cookie: importCookie } })
-    const data = await dashboard.json() as { dashboard: { revenue: number } }
-    expect(data.dashboard.revenue).toBe(6_248_500)
+    expect(list.sources.every((source) => source.industryId === 'fnb')).toBe(true)
+
+    const dashboard = await app.request('/api/dashboard?range=6m&industry=fnb', { headers: { Cookie: importCookie } })
+    const data = await dashboard.json() as {
+      dashboard: {
+        revenue: number
+        cost: number
+        profit: number
+        industry: { id: string; realSourceCount: number }
+        segments: { label: string; share: number }[]
+      }
+    }
+    expect(data.dashboard.revenue).toBe(3000)
+    expect(data.dashboard.cost).toBe(500)
+    expect(data.dashboard.profit).toBe(2500)
+    expect(data.dashboard.industry.id).toBe('fnb')
+    expect(data.dashboard.industry.realSourceCount).toBe(2)
+    expect(data.dashboard.segments.length).toBeGreaterThan(0)
+
+    const otherIndustry = await app.request('/api/dashboard?range=6m&industry=healthcare', { headers: { Cookie: importCookie } })
+    const other = await otherIndustry.json() as { dashboard: unknown }
+    expect(other.dashboard).toBeNull()
+
+    const override = await importCsv(
+      importCookie,
+      'route_sales.csv',
+      'วันที่,ยอดขาย\n2026-11-03,700\n',
+      'sales',
+      { date: 'วันที่', amount: 'ยอดขาย' },
+      'logistics',
+    )
+    const overrideSource = (await override.json() as { source: { industryId?: string } }).source
+    expect(overrideSource.industryId).toBe('logistics')
+
+    const allResponse = await app.request('/api/dashboard?range=6m&industry=all', { headers: { Cookie: importCookie } })
+    const all = await allResponse.json() as {
+      dashboard: { revenue: number; cost: number; industry: { id: string }; costSegments: unknown[] }
+    }
+    expect(all.dashboard.industry.id).toBe('all')
+    expect(all.dashboard.revenue).toBe(3700)
+    expect(all.dashboard.cost).toBe(500)
+    expect(all.dashboard.costSegments.length).toBeGreaterThan(0)
   })
 
   it('syncs conversations and agents', async () => {
@@ -152,12 +230,37 @@ describe('ROOKAR API', () => {
     expect(text).toContain('"type":"done"')
   })
 
+  it('blocks cross-origin auth requests and non-JSON bodies', async () => {
+    const crossOrigin = await app.request('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Origin: 'https://evil.example' },
+      body: JSON.stringify({ email: TEST_EMAIL, password: TEST_PASSWORD }),
+    })
+    expect(crossOrigin.status).toBe(403)
+
+    const plainText = await app.request('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain', Origin: 'http://localhost:5173' },
+      body: JSON.stringify({ email: TEST_EMAIL, password: TEST_PASSWORD }),
+    })
+    expect(plainText.status).toBe(415)
+  })
+
+  it('rejects prototype-chain industry values and parses quoted CSV rows', () => {
+    expect(normalizeIndustryId('toString')).toBe('fnb')
+    expect(normalizeIndustryId('__proto__')).toBe('fnb')
+
+    const parsed = parseCsv('date,note,amount\n2026-11-01,"hello, world",100\n2026-11-02,"line one\nline two",200\n')
+    expect(parsed.rows[0].note).toBe('hello, world')
+    expect(parsed.rows[1].note).toBe('line one\nline two')
+  })
+
   it('resets a password through a one-time token', async () => {
     const email = 'reset@example.com'
     const signup = await app.request('/api/auth/signup', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Origin: 'http://localhost:5173' },
-      body: JSON.stringify({ name: 'Reset User', email, password: 'oldpassword123' }),
+      body: JSON.stringify({ name: 'Reset User', username: 'resetuser', email, password: 'oldpassword123' }),
     })
     expect(signup.status).toBe(200)
 

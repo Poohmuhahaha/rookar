@@ -11,6 +11,7 @@ import { getSession } from '@/lib/mockApi'
 import type { Session } from '@/types'
 import NotFoundPage from '@/pages/NotFoundPage.vue'
 import AppShell from '@/components/layout/AppShell.vue'
+import SetupLayout from '@/components/layout/SetupLayout.vue'
 
 const LoginPage = lazyRouteComponent(() => import('@/pages/LoginPage.vue'))
 const SignUpPage = lazyRouteComponent(() => import('@/pages/SignUpPage.vue'))
@@ -26,6 +27,8 @@ const AssistantPage = lazyRouteComponent(() => import('@/pages/AssistantPage.vue
 const DataDetailPage = lazyRouteComponent(() => import('@/pages/DataDetailPage.vue'))
 const LandingPage = lazyRouteComponent(() => import('@/pages/LandingPage.vue'))
 const PricingPage = lazyRouteComponent(() => import('@/pages/PricingPage.vue'))
+const PolicyPage = lazyRouteComponent(() => import('@/pages/PolicyPage.vue'))
+const DocsPage = lazyRouteComponent(() => import('@/pages/DocsPage.vue'))
 
 function appTarget(session: Session) {
   return session.onboardingComplete ? '/app/assistant' : '/setup'
@@ -64,6 +67,18 @@ const pricingRoute = createRoute({
   component: PricingPage,
 })
 
+const policyRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/policy',
+  component: PolicyPage,
+})
+
+const docsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/docs',
+  component: DocsPage,
+})
+
 const loginRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/login',
@@ -98,7 +113,7 @@ const setupLayoutRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/setup',
   beforeLoad: requireSetupSession,
-  component: AppShell,
+  component: SetupLayout,
 })
 
 const setupRoute = createRoute({
@@ -173,6 +188,8 @@ const assistantRoute = createRoute({
 const routeTree = rootRoute.addChildren([
   indexRoute,
   pricingRoute,
+  policyRoute,
+  docsRoute,
   loginRoute,
   signupRoute,
   forgotRoute,

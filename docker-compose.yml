@@ -6,7 +6,7 @@ services:
     container_name: rookar-web
     restart: unless-stopped
     ports:
-      - "${PORT:-8090}:80"
+      - "${PORT:-8090}:8080"
     networks:
       - web-network
     depends_on:
@@ -22,12 +22,14 @@ services:
     environment:
       PORT: 8787
       DATABASE_URL: /app/data/rookar-docker.sqlite
-      NODE_ENV: development
+      NODE_ENV: production
+      ALLOW_DEV_RESET: ${ALLOW_DEV_RESET:-0}
       APP_URL: ${APP_URL:-http://localhost:8090}
       AI_PROVIDER: ${AI_PROVIDER:-mock}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4.1-mini}
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
+      OPENAI_USER_AGENT: ${OPENAI_USER_AGENT:-rookar-agent/1.0}
       RESEND_API_KEY: ${RESEND_API_KEY:-}
       MAIL_FROM: ${MAIL_FROM:-ROOKAR <no-reply@rookar.co>}
     volumes:
