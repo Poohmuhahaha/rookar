@@ -142,10 +142,12 @@ function openInsight() {
         <DropdownMenuTrigger as-child>
           <button
             type="button"
-            class="inline-flex h-10 items-center gap-2 rounded-full bg-[#f4f5f7] px-4 text-[12px] font-semibold text-ink transition hover:bg-[#eceef1] focus-visible:bg-[#eceef1] focus-visible:outline-none"
+            class="inline-flex h-10 w-full items-center justify-between gap-2 rounded-full bg-[#f4f5f7] px-4 text-[12px] font-semibold text-ink transition hover:bg-[#eceef1] focus-visible:bg-[#eceef1] focus-visible:outline-none sm:w-auto"
           >
-            <component :is="scopeIcon" class="h-4 w-4 text-muted" aria-hidden="true" />
-            {{ scopeShortLabel }}
+            <span class="inline-flex items-center gap-2">
+              <component :is="scopeIcon" class="h-4 w-4 text-muted" aria-hidden="true" />
+              {{ scopeShortLabel }}
+            </span>
             <ChevronDown class="h-4 w-4 text-muted" aria-hidden="true" />
           </button>
         </DropdownMenuTrigger>

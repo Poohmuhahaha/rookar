@@ -1,15 +1,8 @@
 <script setup lang="ts">
 import { computed, onUnmounted, ref, watch, type Ref } from 'vue'
 import { Link, useRouterState } from '@tanstack/vue-router'
-import {
-  ChevronsUpDown,
-  Database,
-  Globe2,
-  LayoutDashboard,
-  Sparkles,
-  X,
-} from '@lucide/vue'
-import LogoMark from '@/components/brand/LogoMark.vue'
+import { ChevronsUpDown, Database, Globe2, LayoutDashboard, Sparkles, X } from '@lucide/vue'
+import BrandLogo from '@/components/brand/BrandLogo.vue'
 import ProfileCardButton from '@/components/layout/ProfileCardButton.vue'
 import { getSession } from '@/lib/mockApi'
 import { sidebarCollapsed } from '@/lib/shell'
@@ -78,20 +71,17 @@ function isActive(to: string, exact: boolean) {
 <template>
   <div class="flex h-full flex-col border-r border-neutral-300! bg-white">
     <!-- Brand / Business Switcher Header -->
-    <div class="flex h-[72px] shrink-0 items-center gap-1.5 p-3">
+    <div v-if="!compact" class="flex h-[72px] shrink-0 items-center gap-1.5 p-3">
       <Link
         to="/setup"
-        class="relative flex h-12 min-w-0 flex-1 items-center rounded-2xl"
+        class="relative flex h-12 min-w-0 flex-1 flex-col justify-center rounded-2xl px-1"
         aria-label="จัดการข้อมูลธุรกิจ"
         title="ROOKAR"
         @click="emit('close')"
       >
-        <LogoMark :size="40" class="absolute left-1 top-1/2 shrink-0 -translate-y-1/2" />
-        <span v-if="!compact" class="min-w-0 flex-1 pl-14">
-          <span class="block truncate text-[14.5px] font-bold tracking-tight text-ink">ROOKAR</span>
-          <span class="block truncate text-[11.5px] font-medium text-muted">{{ businessName }}</span>
-        </span>
-        <ChevronsUpDown v-if="!compact" class="ml-2 h-4 w-4 shrink-0 text-faint" aria-hidden="true" />
+        <BrandLogo :mark-size="22" class="shrink-0 self-start" />
+        <span class="mt-0.5 block truncate pr-5 text-[11px] font-medium text-muted">{{ businessName }}</span>
+        <ChevronsUpDown class="absolute right-0 top-1/2 h-4 w-4 shrink-0 -translate-y-1/2 text-faint" aria-hidden="true" />
       </Link>
 
       <!-- Mobile Close Button -->

@@ -39,6 +39,7 @@ import AppSheet from '@/components/ui/AppSheet.vue'
 import ChatBubble from '@/components/features/ChatBubble.vue'
 import ChatHistory from '@/components/features/ChatHistory.vue'
 import AgentAvatar from '@/components/ui/AgentAvatar.vue'
+import MobileNavButton from '@/components/layout/MobileNavButton.vue'
 import { conversationAgents } from '@/lib/conversationAgents'
 import WelcomeMark from '@/components/brand/WelcomeMark.vue'
 import AgentVaultModal from '@/components/features/AgentVaultModal.vue'
@@ -807,6 +808,7 @@ async function copyMessage(text: string) {
     class="relative flex min-w-0 flex-1 flex-col bg-white"
     :class="messages.length === 0 ? 'overflow-y-auto' : 'overflow-hidden'"
   >
+    <MobileNavButton class="absolute left-3 top-3 z-20 lg:hidden" />
     <button
       type="button"
       class="absolute right-3 top-3 z-20 inline-flex h-9 w-9 items-center justify-center rounded-full bg-[#f4f5f7] text-ink transition hover:bg-[#eceef1] xl:hidden"
@@ -934,32 +936,34 @@ async function copyMessage(text: string) {
               @keydown="handleKeydown"
             />
           </div>
-          <div class="mt-2.5 flex flex-wrap items-center gap-1.5 sm:gap-2">
+          <div class="mt-2.5 flex flex-nowrap items-center gap-1.5 sm:gap-2">
             <button
               type="button"
-              class="inline-flex h-8.5 items-center gap-1.5 whitespace-nowrap rounded-full bg-white px-3 text-[11.5px] font-medium text-ink-soft transition hover:bg-neutral-100 hover:text-ink sm:px-3.5"
+              class="inline-flex h-8.5 w-8.5 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-full bg-white text-[11.5px] font-medium text-ink-soft transition hover:bg-neutral-100 hover:text-ink sm:w-auto sm:justify-start sm:px-3.5"
+              aria-label="ทีม AI"
               @click="openVaultGeneral"
             >
               <Users class="h-3.5 w-3.5 text-muted" aria-hidden="true" />
-              <span>ทีม AI ({{ activeBoardroomAgents.length }})</span>
+              <span class="hidden sm:inline">ทีม AI ({{ activeBoardroomAgents.length }})</span>
             </button>
             <button
               type="button"
-              class="inline-flex h-8.5 items-center gap-1.5 whitespace-nowrap rounded-full bg-white px-3 text-[11.5px] font-medium text-ink-soft transition hover:bg-neutral-100 hover:text-ink sm:px-3.5"
+              class="inline-flex h-8.5 w-8.5 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-full bg-white text-[11.5px] font-medium text-ink-soft transition hover:bg-neutral-100 hover:text-ink sm:w-auto sm:justify-start sm:px-3.5"
+              aria-label="เลือกแชท"
               @click="openChatPicker"
             >
               <History class="h-3.5 w-3.5 text-muted" aria-hidden="true" />
-              <span>เลือกแชท</span>
+              <span class="hidden sm:inline">เลือกแชท</span>
             </button>
             <button
               type="button"
-              class="inline-flex h-8.5 items-center gap-1.5 whitespace-nowrap rounded-full bg-white px-3 text-[11.5px] font-medium text-ink-soft transition hover:bg-neutral-100 hover:text-ink focus-visible:bg-neutral-100 focus-visible:text-ink disabled:pointer-events-none disabled:opacity-45 sm:px-3.5"
+              class="inline-flex h-8.5 w-8.5 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-full bg-white text-[11.5px] font-medium text-ink-soft transition hover:bg-neutral-100 hover:text-ink focus-visible:bg-neutral-100 focus-visible:text-ink disabled:pointer-events-none disabled:opacity-45 sm:w-auto sm:justify-start sm:px-3.5"
               :disabled="!activeSpecialist || isStreaming"
               aria-label="แนบไฟล์"
               @click="pickFile"
             >
               <Paperclip class="h-3.5 w-3.5" aria-hidden="true" />
-              แนบไฟล์
+              <span class="hidden sm:inline">แนบไฟล์</span>
             </button>
             <input
               ref="fileInput"
@@ -984,7 +988,7 @@ async function copyMessage(text: string) {
                   side="bottom"
                   align="start"
                   :side-offset="8"
-                  class="z-[70] min-w-[190px] rounded-2xl bg-surface p-1.5 focus:outline-none"
+                  class="z-[70] min-w-[190px] rounded-2xl border border-black/5 bg-white p-1.5 focus:outline-none"
                 >
                   <DropdownMenuItem
                     class="flex cursor-pointer select-none items-center gap-2 rounded-xl px-3 py-2.5 text-[12px] font-medium text-ink outline-none transition data-[highlighted]:bg-neutral-100"

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { Link } from '@tanstack/vue-router'
 import {
   ArrowRight,
@@ -8,11 +8,16 @@ import {
   CheckCircle2,
   ChevronDown,
   LayoutDashboard,
+  Menu,
   ShieldCheck,
   Sparkles,
+  X,
 } from '@lucide/vue'
 import BrandLogo from '@/components/brand/BrandLogo.vue'
+import KpiCard from '@/components/charts/KpiCard.vue'
+import RevenueChart from '@/components/charts/RevenueChart.vue'
 import { getSession } from '@/lib/mockApi'
+import type { KpiPoint } from '@/types'
 
 const session = getSession()
 
@@ -90,12 +95,35 @@ function clearSpotlight(event: PointerEvent) {
 
 const carouselTrack = ref<HTMLElement | null>(null)
 const stickyCard = ref<HTMLElement | null>(null)
-const activeIndex = ref(0)
-const previousIndex = ref<number | null>(null)
 const scrollProgress = ref(0)
+const mobileMenuOpen = ref(false)
+const headerNav = ref<HTMLElement | null>(null)
+
+function closeMobileMenu() {
+  mobileMenuOpen.value = false
+}
+
+function onDocumentPointerDown(event: PointerEvent) {
+  if (!mobileMenuOpen.value) return
+  if (headerNav.value?.contains(event.target as Node)) return
+  closeMobileMenu()
+}
+
+function onDocumentKeydown(event: KeyboardEvent) {
+  if (event.key === 'Escape') closeMobileMenu()
+}
+const slideProgress = computed(() => scrollProgress.value * (pillars.length - 1))
+const activeIndex = computed(() => Math.round(slideProgress.value))
+
+function slideStyle(index: number) {
+  const exit = Math.min(1, Math.max(0, slideProgress.value - index))
+  return {
+    transform: `translateY(${-120 * exit}%)`,
+    zIndex: pillars.length - index,
+  }
+}
 
 let scrollRaf = 0
-let underTimer: ReturnType<typeof setTimeout> | undefined
 
 function updateScrollProgress() {
   const track = carouselTrack.value
@@ -108,18 +136,7 @@ function updateScrollProgress() {
   const start = trackTop - stickyTop
   const distance = track.offsetHeight - sticky.offsetHeight
   const raw = distance > 0 ? (window.scrollY - start) / distance : 0
-  const progress = Math.min(1, Math.max(0, raw))
-  scrollProgress.value = progress
-
-  const nextIndex = Math.min(pillars.length - 1, Math.floor(progress * pillars.length))
-  if (nextIndex !== activeIndex.value) {
-    previousIndex.value = activeIndex.value
-    activeIndex.value = nextIndex
-    if (underTimer) clearTimeout(underTimer)
-    underTimer = setTimeout(() => {
-      previousIndex.value = null
-    }, 1250)
-  }
+  scrollProgress.value = Math.min(1, Math.max(0, raw))
 }
 
 function handleScroll() {
@@ -134,13 +151,16 @@ onMounted(() => {
   handleScroll()
   window.addEventListener('scroll', handleScroll, { passive: true })
   window.addEventListener('resize', handleScroll)
+  document.addEventListener('pointerdown', onDocumentPointerDown)
+  document.addEventListener('keydown', onDocumentKeydown)
 })
 
 onBeforeUnmount(() => {
   window.removeEventListener('scroll', handleScroll)
   window.removeEventListener('resize', handleScroll)
+  document.removeEventListener('pointerdown', onDocumentPointerDown)
+  document.removeEventListener('keydown', onDocumentKeydown)
   if (scrollRaf) window.cancelAnimationFrame(scrollRaf)
-  if (underTimer) clearTimeout(underTimer)
 })
 
 const steps = [
@@ -164,30 +184,88 @@ const previewKpis = [
   { label: 'ต้นทุนรวม', value: '฿4,566,700', change: '+3.2%' },
   { label: 'อัตรากำไร (Margin)', value: '26.9%', change: '+1.8%' },
 ]
+
+type LandingKpi = {
+  label: string
+  value: string
+  change: string
+  tone: 'positive' | 'negative' | 'neutral'
+  spark: number[]
+  sparkColor: string
+  info: string
+}
+
+const landingKpis: LandingKpi[] = [
+  {
+    label: 'รายได้รวม',
+    value: '฿6,248,500',
+    change: '+12.4%',
+    tone: 'positive',
+    spark: [684000, 762000, 786000, 862000, 918000, 1284500],
+    sparkColor: '#18181b',
+    info: 'รายได้รวมจากทุกช่องทางในช่วง 6 เดือนล่าสุด',
+  },
+  {
+    label: 'กำไรสุทธิ',
+    value: '฿1,681,800',
+    change: '+8.1%',
+    tone: 'positive',
+    spark: [164000, 192000, 204000, 229000, 248000, 342800],
+    sparkColor: '#ea580c',
+    info: 'รายได้หักต้นทุนและค่าใช้จ่ายทั้งหมดแล้ว',
+  },
+  {
+    label: 'ต้นทุนรวม',
+    value: '฿4,566,700',
+    change: '+3.2%',
+    tone: 'negative',
+    spark: [690000, 720000, 700000, 740000, 760000, 820000],
+    sparkColor: '#18181b',
+    info: 'ต้นทุนวัตถุดิบ ค่าแรง และค่าใช้จ่ายดำเนินงาน',
+  },
+  {
+    label: 'อัตรากำไร',
+    value: '26.9%',
+    change: '+1.8 จุด',
+    tone: 'positive',
+    spark: [24.1, 23.9, 24.5, 25.2, 26.1, 26.9],
+    sparkColor: '#18181b',
+    info: 'กำไรสุทธิหารด้วยรายได้รวม คิดเป็นเปอร์เซ็นต์',
+  },
+]
+
+const previewSeries: KpiPoint[] = [
+  { label: 'มิ.ย.', revenue: 862000, profit: 229000 },
+  { label: 'ก.ค.', revenue: 918000, profit: 248000 },
+  { label: 'ส.ค.', revenue: 904000, profit: 241000 },
+  { label: 'ก.ย.', revenue: 982000, profit: 266000 },
+  { label: 'ต.ค.', revenue: 1042000, profit: 281000 },
+  { label: 'พ.ย.', revenue: 1284500, profit: 342800 },
+]
 </script>
 
 <template>
   <div class="min-h-dvh bg-canvas text-ink selection:bg-brand-100 selection:text-brand-900">
     <!-- Navigation Bar -->
-    <header class="sticky top-0 z-50 bg-transparent">
-      <div class="px-4 sm:px-5">
-        <div class="mx-auto flex max-w-7xl items-center justify-between py-4 2xl:max-w-[1560px] 3xl:max-w-[1680px] 3xl:py-5">
+    <header class="relative z-50">
+      <div ref="headerNav" class="px-4 pt-3 sm:px-5">
+        <div class="relative mx-auto flex max-w-7xl items-center justify-between rounded-full border border-white/50 bg-white/60 px-4 py-3 backdrop-blur-xl backdrop-saturate-150 supports-[backdrop-filter]:bg-white/45 2xl:max-w-[1560px] 3xl:max-w-[1680px] 3xl:px-5 3xl:py-4">
           <Link to="/" aria-label="ROOKAR" class="shrink-0">
-            <BrandLogo :mark-size="34" />
+            <BrandLogo :mark-size="34" class="!h-[30px] sm:!h-[34px]" />
           </Link>
 
-          <nav class="hidden items-center gap-7 text-[14px] font-medium text-muted md:flex 3xl:gap-8">
+          <nav class="hidden items-center gap-7 text-[14px] font-medium text-ink/70 md:flex 3xl:gap-8">
             <a href="#features" class="transition hover:text-ink">ฟีเจอร์เด่น</a>
             <a href="#how-it-works" class="transition hover:text-ink">ขั้นตอนการทำงาน</a>
             <a href="#faq" class="transition hover:text-ink">คำถามพบบ่อย</a>
             <Link to="/docs" class="transition hover:text-ink">Docs</Link>
           </nav>
 
-          <div class="flex items-center gap-2 sm:gap-3">
+          <div class="flex items-center gap-1.5 sm:gap-3">
             <template v-if="session">
               <Link
                 to="/app"
-                class="inline-flex h-10 items-center justify-center gap-1.5 rounded-full bg-black px-4 text-[14px] font-semibold text-white transition-colors hover:bg-neutral-800 3xl:h-12 3xl:px-5"
+                class="hidden h-9 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-full bg-black px-3 text-[13px] font-semibold text-white transition-colors hover:bg-neutral-800 min-[360px]:inline-flex sm:h-10 sm:px-4 sm:text-[14px] 3xl:h-12 3xl:px-5"
               >
                 ไปที่แดชบอร์ด
                 <ArrowRight class="h-4 w-4" aria-hidden="true" />
@@ -200,22 +278,99 @@ const previewKpis = [
               >
                 เข้าสู่ระบบ
               </Link>
+            </template>
+
+            <button
+              type="button"
+              class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-ink transition-colors hover:bg-black/5 sm:h-10 sm:w-10 md:hidden"
+              :aria-expanded="mobileMenuOpen"
+              aria-controls="mobile-menu"
+              :aria-label="mobileMenuOpen ? 'ปิดเมนู' : 'เปิดเมนู'"
+              @click="mobileMenuOpen = !mobileMenuOpen"
+            >
+              <X v-if="mobileMenuOpen" class="h-5 w-5" aria-hidden="true" />
+              <Menu v-else class="h-5 w-5" aria-hidden="true" />
+            </button>
+          </div>
+
+          <nav
+            v-if="mobileMenuOpen"
+            id="mobile-menu"
+            class="absolute inset-x-0 top-full z-50 mt-2 rounded-[1.75rem] border border-black/5 bg-white p-2 text-[14px] font-medium text-ink md:hidden"
+            aria-label="เมนูหลัก"
+          >
+            <a
+              href="#features"
+              class="block rounded-2xl px-4 py-3 transition-colors hover:bg-black/5"
+              @click="closeMobileMenu"
+            >
+              ฟีเจอร์เด่น
+            </a>
+            <a
+              href="#how-it-works"
+              class="block rounded-2xl px-4 py-3 transition-colors hover:bg-black/5"
+              @click="closeMobileMenu"
+            >
+              ขั้นตอนการทำงาน
+            </a>
+            <a
+              href="#faq"
+              class="block rounded-2xl px-4 py-3 transition-colors hover:bg-black/5"
+              @click="closeMobileMenu"
+            >
+              คำถามพบบ่อย
+            </a>
+            <Link
+              to="/docs"
+              class="block rounded-2xl px-4 py-3 transition-colors hover:bg-black/5"
+              @click="closeMobileMenu"
+            >
+              Docs
+            </Link>
+            <template v-if="!session">
+              <div class="mx-2 my-1 h-px bg-black/10" aria-hidden="true" />
+              <Link
+                to="/login"
+                class="block rounded-2xl px-4 py-3 transition-colors hover:bg-black/5"
+                @click="closeMobileMenu"
+              >
+                เข้าสู่ระบบ
+              </Link>
               <Link
                 to="/signup"
-                class="inline-flex h-10 items-center justify-center rounded-full bg-black px-4 text-[14px] font-semibold text-white transition-colors hover:bg-neutral-800 3xl:h-12 3xl:px-5"
+                class="mt-1 flex h-11 items-center justify-center rounded-full bg-black px-4 text-[14px] font-semibold text-white transition-colors hover:bg-neutral-800"
+                @click="closeMobileMenu"
               >
                 เริ่มทดลองฟรี
               </Link>
             </template>
-          </div>
+            <template v-else>
+              <div class="mx-2 my-1 h-px bg-black/10" aria-hidden="true" />
+              <Link
+                to="/app"
+                class="mt-1 flex h-11 items-center justify-center gap-1.5 rounded-full bg-black px-4 text-[14px] font-semibold text-white transition-colors hover:bg-neutral-800"
+                @click="closeMobileMenu"
+              >
+                ไปที่แดชบอร์ด
+                <ArrowRight class="h-4 w-4" aria-hidden="true" />
+              </Link>
+            </template>
+          </nav>
         </div>
       </div>
     </header>
 
+    <div
+      v-if="mobileMenuOpen"
+      class="fixed inset-0 z-40 bg-black/25 backdrop-blur-sm md:hidden"
+      aria-hidden="true"
+      @click="closeMobileMenu"
+    />
+
     <main>
       <!-- Hero -->
-      <section class="px-4 pb-4 sm:px-5">
-        <div class="relative mx-auto max-w-7xl overflow-hidden rounded-[32px] bg-brand-950 text-white 2xl:max-w-[1560px] 3xl:max-w-[1680px] 3xl:rounded-[40px]">
+      <section class="px-4 sm:px-5">
+        <div class="relative mx-auto flex min-h-[calc(80dvh+1rem)] max-w-7xl flex-col overflow-hidden rounded-[32px] bg-brand-950 text-white 2xl:max-w-[1560px] 3xl:max-w-[1680px] 3xl:rounded-[40px]">
           <div class="bg-waves absolute inset-0 scale-110 opacity-35 mix-blend-screen" aria-hidden="true" />
           <div
             class="absolute inset-0 bg-gradient-to-br from-brand-950/95 via-brand-950/80 to-brand-800/60"
@@ -226,7 +381,7 @@ const previewKpis = [
             aria-hidden="true"
           />
 
-          <div class="relative grid gap-12 p-6 sm:p-10 lg:grid-cols-[1.02fr_0.98fr] lg:items-center lg:p-14 2xl:gap-16 2xl:p-16 3xl:p-20">
+          <div class="relative grid flex-1 shrink-0 content-center gap-12 p-6 sm:p-10 lg:grid-cols-[1.02fr_0.98fr] lg:items-center lg:p-14 2xl:gap-16 2xl:p-16 3xl:p-20">
             <div>
               <h1
                 class="mt-6 text-balance text-[clamp(2.5rem,4.4vw,4.5rem)] font-semibold leading-[1.14] tracking-[-0.035em]"
@@ -291,7 +446,7 @@ const previewKpis = [
                 <div class="flex min-w-0 items-center gap-2">
                   <BrandLogo :mark-size="24" compact />
                   <span class="truncate text-[12.5px] font-semibold text-ink">
-                    ROOKAR Workspace
+                    Workspace
                     <span class="font-medium text-muted">— บลูมมิ่ง คอฟฟี่</span>
                   </span>
                 </div>
@@ -342,9 +497,8 @@ const previewKpis = [
       <!-- 4 Core Pillars -->
       <section id="features" class="relative">
         <div class="mx-auto max-w-7xl px-4 sm:px-5 2xl:max-w-[1560px] 3xl:max-w-[1680px]">
-          <div class="mx-auto max-w-2xl pb-11 pt-16 text-center sm:pt-20 2xl:max-w-3xl 3xl:pb-14 3xl:pt-24">
-            <p class="text-[11px] font-semibold uppercase tracking-[0.18em] text-faint">4 เสาหลักของ ROOKAR</p>
-            <h2 class="mt-3 text-balance text-[clamp(1.9rem,2.8vw,2.75rem)] font-semibold tracking-[-0.03em] text-ink">
+          <div class="mx-auto hidden max-w-2xl pb-11 pt-16 text-center sm:pt-20 lg:block 2xl:max-w-3xl 3xl:pb-14 3xl:pt-24">
+            <h2 class="text-balance text-[clamp(1.9rem,2.8vw,2.75rem)] font-semibold tracking-[-0.03em] text-ink">
               พื้นที่ทำงาน AI สำหรับการตัดสินใจธุรกิจ
             </h2>
             <p class="mt-3 text-sm leading-relaxed text-muted">
@@ -356,22 +510,26 @@ const previewKpis = [
         <div ref="carouselTrack" class="relative h-[360vh] w-full">
             <div
               ref="stickyCard"
-              class="sticky top-0 h-dvh w-full"
+              class="pillar-sticky sticky top-0 flex h-dvh w-full flex-col items-center justify-center gap-5 px-4 sm:px-5 lg:gap-0"
               role="region"
               aria-roledescription="carousel"
               aria-label="4 เสาหลักของ ROOKAR"
             >
-              <div class="pillar-stage">
+              <div class="w-full max-w-2xl text-center lg:hidden">
+                <h2 class="text-balance text-[clamp(1.35rem,5vw,1.75rem)] font-semibold tracking-[-0.03em] text-ink">
+                  พื้นที่ทำงาน AI สำหรับการตัดสินใจธุรกิจ
+                </h2>
+                <p class="mx-auto mt-2 max-w-md text-[12.5px] leading-relaxed text-muted">
+                  ไม่ใช่แค่แชตบอตทั่วไป แต่คือโครงสร้าง AI Workspace ที่ออกแบบมาเพื่อแก้ไข Pain Point ของ SME ไทยโดยเฉพาะ
+                </p>
+              </div>
+              <div class="pillar-stage mx-auto max-w-7xl 2xl:max-w-[1560px] 3xl:max-w-[1680px]">
                 <article
                   v-for="(pillar, index) in pillars"
                   :key="pillar.title"
-                  class="pillar-slide pillar-card group px-7 pb-6 pt-20 sm:px-10 sm:pb-8 sm:pt-28 lg:px-24 lg:pb-14 lg:pt-32 2xl:px-40"
-                  :class="{
-                    'is-active': index === activeIndex,
-                    'is-under': index === previousIndex,
-                    'is-above': index !== activeIndex && index !== previousIndex && index < activeIndex,
-                    'is-below': index !== activeIndex && index !== previousIndex && index > activeIndex,
-                  }"
+                  class="pillar-slide pillar-card group p-6 sm:p-10 lg:p-14 2xl:p-16 3xl:p-20"
+                  :class="{ 'is-active': index === activeIndex }"
+                  :style="slideStyle(index)"
                 role="group"
                 aria-roledescription="slide"
                 :aria-label="`${index + 1} จาก ${pillars.length}: ${pillar.title}`"
@@ -382,150 +540,164 @@ const previewKpis = [
               >
                 <div class="pillar-orb" aria-hidden="true" />
 
-                <div class="relative z-10 grid w-full gap-4 sm:gap-8 lg:grid-cols-[0.9fr_1.1fr] lg:items-center lg:gap-14 2xl:gap-20">
+                <div class="pillar-content relative z-10 grid w-full gap-4 sm:gap-8 lg:grid-cols-[0.9fr_1.1fr] lg:items-center lg:gap-14 2xl:gap-20">
                   <div>
-                    <div class="flex items-start gap-3">
-                      <div
-                        class="pillar-icon flex h-14 w-14 shrink-0 items-center justify-center rounded-[18px] bg-white/10 text-white transition-all duration-500 group-hover:-rotate-6 group-hover:scale-110 group-hover:bg-white/15 2xl:h-16 2xl:w-16 2xl:rounded-[20px]"
-                      >
-                        <component :is="pillar.icon" class="h-6 w-6 2xl:h-7 2xl:w-7" aria-hidden="true" />
-                      </div>
-                      <span
-                        class="mt-1 rounded-full bg-white/[0.06] px-3 py-1 text-[10.5px] font-medium uppercase tracking-[0.14em] text-white/45"
-                      >
-                        Pillar {{ String(index + 1).padStart(2, '0') }}
-                      </span>
-                    </div>
-
-                    <p class="mt-6 text-[11px] font-medium uppercase tracking-[0.16em] text-accent-400/80 sm:mt-10 lg:mt-14">
-                      {{ pillar.kicker }}
-                    </p>
                     <h3
-                      class="mt-4 text-[clamp(2.2rem,4.4vw,5rem)] font-semibold tracking-[-0.04em] text-white"
+                      class="text-[clamp(1.75rem,4.4vw,5rem)] font-semibold tracking-[-0.04em] text-white"
                     >
                       {{ pillar.title }}
                     </h3>
-                    <p class="mt-4 max-w-xl text-[15px] leading-relaxed text-white/60">
+                    <p class="mt-3 max-w-xl text-[14px] leading-relaxed text-white/60 sm:mt-4 sm:text-[15px]">
                       {{ pillar.body }}
                     </p>
-                    <div class="mt-5 flex flex-wrap gap-2 sm:mt-8">
+                    <div class="mt-4 flex flex-wrap gap-1.5 sm:mt-8 sm:gap-2">
                       <span
                         v-for="tag in pillar.tags"
                         :key="tag"
-                        class="rounded-full bg-white/[0.06] px-4 py-2 text-[11.5px] font-medium text-white/45 transition-colors duration-300 group-hover:bg-white/[0.1] group-hover:text-white/70"
+                        class="rounded-full bg-white/[0.06] px-3 py-1.5 text-[10.5px] font-medium text-white/45 transition-colors duration-300 group-hover:bg-white/[0.1] group-hover:text-white/70 sm:px-4 sm:py-2 sm:text-[11.5px]"
                       >
                         {{ tag }}
                       </span>
                     </div>
                   </div>
 
-                  <div
-                    class="relative flex min-h-[170px] items-center justify-center rounded-[24px] bg-white/[0.035] p-4 sm:min-h-[280px] sm:rounded-[28px] sm:p-8 lg:min-h-[420px] lg:p-10 2xl:min-h-[560px]"
-                  >
-                    <span
-                      class="absolute right-4 top-2 text-[clamp(4rem,9vw,11rem)] font-semibold leading-none tracking-[-0.08em] text-white/[0.07] transition-all duration-500 group-hover:-translate-y-1 group-hover:text-white/[0.11] sm:right-7 sm:top-5"
-                      aria-hidden="true"
-                    >
-                      {{ String(index + 1).padStart(2, '0') }}
-                    </span>
+                  <div class="pillar-visual relative w-full">
+                    <div class="relative z-10 w-full">
+                      <template v-if="pillar.visual === 'memory'">
+                        <div class="grid grid-cols-2 gap-2 sm:gap-2.5">
+                          <KpiCard
+                            v-for="kpi in landingKpis"
+                            :key="kpi.label"
+                            :label="kpi.label"
+                            :value="kpi.value"
+                            :change="kpi.change"
+                            :tone="kpi.tone"
+                            :spark="kpi.spark"
+                            :spark-color="kpi.sparkColor"
+                            :info="kpi.info"
+                          />
+                        </div>
+                      </template>
 
-                    <div class="relative z-10 w-full max-w-[560px]">
-                      <div v-if="pillar.visual === 'memory'" class="w-full space-y-3">
-                        <div
-                          v-for="(item, itemIndex) in [
-                            { label: 'Goals', width: '92%' },
-                            { label: 'Memory', width: '72%' },
-                            { label: 'History', width: '54%' },
-                          ]"
-                          :key="item.label"
-                          class="flex items-center gap-4 transition-transform duration-500 group-hover:translate-x-1"
-                          :style="{ transitionDelay: `${itemIndex * 70}ms` }"
-                        >
-                          <span class="h-2 w-2 shrink-0 rounded-full bg-accent-400/80" />
-                          <div class="h-9 flex-1 overflow-hidden rounded-full bg-white/[0.05] sm:h-11">
-                            <div
-                              class="flex h-full items-center rounded-full bg-white/[0.07] px-4 text-[10.5px] uppercase tracking-[0.14em] text-white/45 transition-all duration-500 group-hover:bg-white/[0.1]"
-                              :style="{ width: item.width }"
-                            >
-                              {{ item.label }}
+                      <template v-else-if="pillar.visual === 'agents'">
+                        <div class="card-fade-static p-3.5">
+                          <div class="relative z-10">
+                            <div class="flex items-center justify-between gap-2">
+                              <span class="inline-flex items-center gap-1.5 rounded-full bg-black px-2.5 py-1 text-[9.5px] font-semibold text-white">
+                                <span class="flex h-3.5 w-3.5 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white/20">
+                                  <img src="/ai-avatar.png" alt="AI" class="h-full w-full object-cover" />
+                                </span>
+                                AI วิเคราะห์
+                              </span>
+                              <span class="text-[9.5px] font-medium text-muted">อ้างอิง 1,284 แถว</span>
+                            </div>
+                            <h4 class="mt-2.5 text-[14px] font-bold leading-snug tracking-tight text-ink">
+                              ต้นทุนบรรจุภัณฑ์กำลังกัดกำไร 6.2%
+                            </h4>
+                            <p class="mt-1.5 text-[11px] leading-relaxed text-muted">
+                              เจรจาลดราคาแพ็กเกจจิ้ง 5% จะช่วยเพิ่มกำไรสุทธิ +฿118,734 จากข้อมูล 6 เดือนล่าสุด
+                            </p>
+                            <div class="mt-2.5 inline-flex h-8 items-center gap-1.5 rounded-full bg-ink px-3 text-[10.5px] font-semibold text-white">
+                              ดูแนวทางปรับราคา
+                              <ArrowRight class="h-3 w-3" aria-hidden="true" />
+                            </div>
+                            <div class="mt-3 grid grid-cols-3 gap-2 rounded-xl bg-white/80 p-2.5">
+                              <div>
+                                <p class="text-[9px] font-semibold text-muted">รายได้</p>
+                                <p class="mt-0.5 text-[11px] font-bold text-ink">+12.4%</p>
+                              </div>
+                              <div>
+                                <p class="text-[9px] font-semibold text-muted">กำไร</p>
+                                <p class="mt-0.5 text-[11px] font-bold text-ink">+8.1%</p>
+                              </div>
+                              <div>
+                                <p class="text-[9px] font-semibold text-muted">ต้นทุน</p>
+                                <p class="mt-0.5 text-[11px] font-bold text-rose-700">+3.2%</p>
+                              </div>
                             </div>
                           </div>
                         </div>
-                      </div>
-
-                      <div v-else-if="pillar.visual === 'agents'" class="grid w-full grid-cols-2 gap-3">
-                        <div
-                          v-for="(agent, agentIndex) in ['Finance', 'Market', 'Strategy', 'Planning']"
-                          :key="agent"
-                          class="rounded-2xl bg-white/[0.06] px-3.5 py-3 transition-all duration-500 group-hover:-translate-y-1 group-hover:bg-white/[0.11] sm:px-4 sm:py-4"
-                          :style="{ transitionDelay: `${agentIndex * 60}ms` }"
-                        >
-                          <span class="block text-[9.5px] uppercase tracking-[0.16em] text-white/35">
-                            Specialist
-                          </span>
-                          <span class="mt-1.5 block text-[14px] font-medium text-white/80">{{ agent }}</span>
-                        </div>
-                      </div>
-
-                      <div
-                        v-else-if="pillar.visual === 'sources'"
-                        class="w-full rounded-2xl bg-white/[0.05] p-4 sm:p-6"
-                      >
-                        <div
-                          class="flex items-center gap-2 text-[11px] font-medium uppercase tracking-[0.14em] text-white/45"
-                        >
-                          <CheckCircle2 class="h-5 w-5 text-emerald-400" aria-hidden="true" />
-                          Verified sources
-                        </div>
-                        <div class="mt-4 flex flex-wrap gap-2">
-                          <span
-                            v-for="source in ['IMF', 'World Bank', 'NSO']"
-                            :key="source"
-                            class="rounded-full bg-white/[0.07] px-3 py-1.5 text-[11px] font-medium text-white/55"
+                        <div class="mt-2.5 grid grid-cols-2 gap-2">
+                          <div
+                            v-for="agent in ['Finance', 'Market', 'Strategy', 'Planning']"
+                            :key="agent"
+                            class="rounded-xl bg-surface px-2.5 py-2 text-[10px] font-medium text-ink"
                           >
-                            {{ source }}
-                          </span>
+                            <span class="block text-[8px] uppercase tracking-[0.12em] text-muted">Specialist</span>
+                            {{ agent }}
+                          </div>
                         </div>
-                        <div class="mt-4 h-2 overflow-hidden rounded-full bg-white/[0.06]">
-                          <div
-                            class="h-full w-[78%] rounded-full bg-gradient-to-r from-emerald-400/70 to-accent-400/70 transition-all duration-700 group-hover:w-[92%]"
-                          />
-                        </div>
-                        <p class="mt-3 text-[11px] leading-relaxed text-white/35">
-                          Cross-checked across official datasets
-                        </p>
-                      </div>
+                      </template>
 
-                      <div v-else class="w-full">
-                        <div class="flex h-44 items-end gap-3">
-                          <div
-                            v-for="(bar, barIndex) in [64, 96, 78, 132, 112, 152]"
-                            :key="barIndex"
-                            class="flex-1 origin-bottom rounded-t-md bg-white/[0.09] transition-all duration-500 group-hover:scale-y-105 group-hover:bg-white/[0.16]"
-                            :style="{ height: `${bar}px`, transitionDelay: `${barIndex * 40}ms` }"
-                          />
+                      <template v-else-if="pillar.visual === 'sources'">
+                        <div class="card-fade-static p-3.5">
+                          <div class="relative z-10">
+                            <div class="flex items-center justify-between gap-2">
+                              <h4 class="text-[13px] font-bold text-ink">เทียบกับเศรษฐกิจไทย</h4>
+                              <span class="text-[9px] font-medium text-muted">IMF · World Bank · NSO</span>
+                            </div>
+                            <div class="mt-2.5 grid grid-cols-3 gap-2">
+                              <div class="rounded-xl bg-white/80 p-2.5">
+                                <p class="text-[9px] text-muted">GDP ประเทศไทย</p>
+                                <p class="tabular mt-0.5 text-[16px] font-bold text-ink">2.8%</p>
+                                <p class="mt-0.5 text-[9px] text-muted">ปี 2569</p>
+                              </div>
+                              <div class="rounded-xl bg-white/80 p-2.5">
+                                <p class="text-[9px] text-muted">เงินเฟ้อ (CPI)</p>
+                                <p class="tabular mt-0.5 text-[16px] font-bold text-ink">0.5%</p>
+                                <p class="mt-0.5 text-[9px] text-muted">ปี 2569</p>
+                              </div>
+                              <div class="rounded-xl bg-white/80 p-2.5">
+                                <p class="text-[9px] text-muted">อัตราว่างงาน</p>
+                                <p class="tabular mt-0.5 text-[16px] font-bold text-ink">0.9%</p>
+                                <p class="mt-0.5 text-[9px] text-muted">Q1/2569</p>
+                              </div>
+                            </div>
+                            <div class="mt-2.5 flex items-center gap-1.5 text-[9.5px] text-muted">
+                              <CheckCircle2 class="h-3.5 w-3.5 text-emerald-500" aria-hidden="true" />
+                              ตรวจสอบจากแหล่งทางการแล้ว
+                            </div>
+                            <div class="mt-2 flex flex-wrap gap-1.5">
+                              <span
+                                v-for="source in ['IMF', 'World Bank', 'NSO']"
+                                :key="source"
+                                class="rounded-full bg-white/80 px-2.5 py-1 text-[9.5px] font-medium text-ink-soft"
+                              >
+                                {{ source }}
+                              </span>
+                            </div>
+                          </div>
                         </div>
-                        <div class="mt-4 flex justify-between text-[9.5px] uppercase tracking-[0.16em] text-white/35">
-                          <span>Revenue</span>
-                          <span>Cost</span>
-                          <span>Margin</span>
+                      </template>
+
+                      <template v-else>
+                        <div class="card-fade-static p-3">
+                          <div class="relative z-10">
+                            <div class="flex items-center justify-between gap-2">
+                              <h4 class="text-[13px] font-bold text-ink">รายได้และกำไร</h4>
+                              <span class="text-[9px] font-medium text-muted">6 เดือนล่าสุด</span>
+                            </div>
+                            <div class="mt-1">
+                              <RevenueChart :series="previewSeries" />
+                            </div>
+                            <div class="mt-2 flex flex-wrap gap-1.5">
+                              <span
+                                v-for="output in ['ตาราง', 'What-If', 'Action Plan']"
+                                :key="output"
+                                class="rounded-full bg-surface px-2.5 py-1 text-[9.5px] font-medium text-ink-soft"
+                              >
+                                {{ output }}
+                              </span>
+                            </div>
+                          </div>
                         </div>
-                      </div>
+                      </template>
                     </div>
                   </div>
                 </div>
                 </article>
               </div>
 
-              <div
-                class="pointer-events-none absolute inset-x-0 bottom-0 z-30 h-1 bg-white/10"
-                aria-hidden="true"
-              >
-                <div
-                  class="h-full bg-accent-400/80"
-                  :style="{ width: `${scrollProgress * 100}%` }"
-                />
-              </div>
             </div>
           </div>
       </section>
@@ -534,8 +706,7 @@ const previewKpis = [
       <section id="how-it-works" class="px-4 sm:px-5">
         <div class="mx-auto max-w-7xl rounded-[32px] bg-surface px-5 py-14 sm:px-10 sm:py-16 lg:px-14 2xl:max-w-[1560px] 2xl:px-16 2xl:py-20 3xl:max-w-[1680px] 3xl:rounded-[40px] 3xl:px-20 3xl:py-24">
           <div class="mx-auto max-w-2xl text-center 2xl:max-w-3xl">
-            <p class="text-[11px] font-semibold uppercase tracking-[0.18em] text-faint">ง่ายและรวดเร็ว</p>
-            <h2 class="mt-3 text-balance text-[clamp(1.9rem,2.8vw,2.75rem)] font-semibold tracking-[-0.03em] text-ink">
+            <h2 class="text-balance text-[clamp(1.9rem,2.8vw,2.75rem)] font-semibold tracking-[-0.03em] text-ink">
               เริ่มใช้งานใน 3 ขั้นตอน
             </h2>
           </div>
@@ -596,13 +767,13 @@ const previewKpis = [
 
       <!-- Bottom CTA -->
       <section class="px-4 pb-4 sm:px-5">
-        <div class="relative mx-auto max-w-7xl overflow-hidden rounded-[32px] bg-brand-950 px-6 py-14 text-center text-white sm:px-10 sm:py-16 2xl:max-w-[1560px] 2xl:px-16 2xl:py-20 3xl:max-w-[1680px] 3xl:rounded-[40px] 3xl:px-20 3xl:py-24">
+        <div class="relative mx-auto flex min-h-[calc(80dvh+1rem)] max-w-7xl flex-col justify-center overflow-hidden rounded-[32px] bg-brand-950 px-6 py-14 text-center text-white sm:px-10 sm:py-16 2xl:max-w-[1560px] 2xl:px-16 2xl:py-20 3xl:max-w-[1680px] 3xl:rounded-[40px] 3xl:px-20 3xl:py-24">
           <div class="bg-waves absolute inset-0 scale-110 opacity-30 mix-blend-screen" aria-hidden="true" />
           <div
             class="absolute inset-0 bg-gradient-to-br from-brand-950/95 via-brand-950/85 to-brand-800/60"
             aria-hidden="true"
           />
-          <div class="relative mx-auto max-w-2xl 2xl:max-w-3xl">
+          <div class="relative mx-auto w-full max-w-2xl shrink-0 2xl:max-w-3xl">
             <div class="flex justify-center">
               <BrandLogo variant="light" :mark-size="34" />
             </div>

@@ -1,6 +1,4 @@
 <script setup lang="ts">
-import LogoMark from './LogoMark.vue'
-
 withDefaults(
   defineProps<{
     variant?: 'dark' | 'light'
@@ -12,17 +10,11 @@ withDefaults(
 </script>
 
 <template>
-  <div class="flex items-center gap-2.5">
-    <LogoMark :size="markSize" class="shrink-0" />
-    <div v-if="!compact" class="leading-none">
-      <span
-        :class="[
-          'text-[17px] font-semibold tracking-[0.16em]',
-          variant === 'light' ? 'text-white' : 'text-ink',
-        ]"
-      >
-        ROOKAR
-      </span>
-    </div>
-  </div>
+  <img
+    :src="variant === 'light' ? '/brand/rookar-logo-white.png' : '/brand/rookar-logo-dark.png'"
+    alt="ROOKAR"
+    :style="{ height: `${markSize}px` }"
+    class="w-auto shrink-0 select-none"
+    draggable="false"
+  />
 </template>

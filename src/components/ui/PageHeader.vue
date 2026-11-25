@@ -2,6 +2,7 @@
 import { Link } from '@tanstack/vue-router'
 import { ChevronRight } from '@lucide/vue'
 import InfoTip from './InfoTip.vue'
+import MobileNavButton from '@/components/layout/MobileNavButton.vue'
 
 defineProps<{
   title: string
@@ -12,10 +13,11 @@ defineProps<{
 
 <template>
   <header
-    class="sticky -top-4 z-20 -mx-4 flex flex-col gap-4 bg-white/95 px-4 py-4 backdrop-blur-md sm:-top-6 sm:-mx-6 sm:flex-row sm:items-end sm:justify-between sm:px-6 sm:py-5 lg:-top-5 lg:-mx-8 lg:px-8"
+    class="sticky -top-4 z-20 -mx-4 flex flex-col gap-4 bg-white/95 px-4 py-4 backdrop-blur-md sm:-top-6 sm:-mx-6 sm:flex-row sm:items-end sm:justify-between sm:px-6 sm:py-5 lg:-top-5 lg:-mx-8 lg:px-8 lg:py-5"
   >
     <div class="min-w-0">
       <div class="flex items-center gap-1.5">
+        <MobileNavButton class="lg:hidden" />
         <slot name="leading" />
         <h1 class="flex flex-wrap items-center gap-x-2 gap-y-1 text-[24px] font-semibold tracking-[-0.02em] text-ink">
           <template v-if="breadcrumb">

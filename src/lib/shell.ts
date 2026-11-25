@@ -42,6 +42,7 @@ function readCollapsed() {
 
 export const sidebarWidth = ref(readWidth())
 export const sidebarCollapsed = ref(readCollapsed())
+export const mobileNavOpen = ref(false)
 
 export function setSidebarWidth(value: number) {
   sidebarWidth.value = Math.min(sidebarMaxWidth(), Math.max(sidebarMinWidth(), Math.round(value)))

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { Image as ImageIcon, PanelRightClose, Plus, Search, Trash2 } from '@lucide/vue'
+import { PanelRightClose, Plus, Search, Trash2 } from '@lucide/vue'
 import LogoMark from '@/components/brand/LogoMark.vue'
 import AgentAvatar from '@/components/ui/AgentAvatar.vue'
 import { conversationAgents } from '@/lib/conversationAgents'
@@ -55,14 +55,6 @@ function agentsFor(conversation: Conversation) {
     <header class="flex items-center justify-between gap-2 px-4 pb-3 pt-4">
       <h2 class="truncate text-[15px] font-bold tracking-tight text-ink">ประวัติการสนทนา</h2>
       <div class="flex items-center gap-1">
-        <button
-          type="button"
-          class="inline-flex h-7 w-7 items-center justify-center rounded-full bg-ink-50/80 text-muted transition hover:bg-ink-100 hover:text-ink"
-          aria-label="สลับมุมมองแกลเลอรี"
-          title="สลับมุมมองแกลเลอรี"
-        >
-          <ImageIcon class="h-3.5 w-3.5" aria-hidden="true" />
-        </button>
         <button
           v-if="closable"
           type="button"

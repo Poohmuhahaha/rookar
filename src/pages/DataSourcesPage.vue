@@ -177,7 +177,7 @@ function downloadTemplate() {
           aria-label="ค้นหาแหล่งข้อมูล"
         />
       </div>
-      <AppButton variant="secondary" @click="downloadTemplate">
+      <AppButton variant="secondary" class="w-full sm:w-auto" @click="downloadTemplate">
         <template #left>
           <Download class="h-4 w-4" aria-hidden="true" />
         </template>
@@ -188,12 +188,12 @@ function downloadTemplate() {
 
   <div class="grid gap-5 xl:grid-cols-[200px_minmax(0,1fr)]">
       <form class="order-1 mb-3 flex flex-wrap items-center justify-start gap-2 sm:justify-end xl:col-start-2 xl:row-start-1 xl:mb-0" role="search" @submit.prevent>
-    <div class="flex items-center gap-2">
+    <div class="flex w-full items-center gap-2 sm:w-auto">
     <DropdownMenuRoot>
       <DropdownMenuTrigger as-child>
         <button
           type="button"
-          class="inline-flex h-10 items-center gap-2 rounded-full bg-ink px-4 text-[12px] font-semibold text-white transition hover:bg-black"
+          class="inline-flex h-10 flex-1 items-center justify-center gap-2 rounded-full bg-ink px-4 text-[12px] font-semibold text-white transition hover:bg-black sm:flex-none"
           aria-label="กรองตามประเภทข้อมูล"
         >
           <ListFilter class="h-3.5 w-3.5 text-white/70" aria-hidden="true" />
@@ -226,7 +226,7 @@ function downloadTemplate() {
         </DropdownMenuContent>
       </DropdownMenuPortal>
     </DropdownMenuRoot>
-    <AppButton size="sm" @click="router.navigate({ to: '/app/import' })">
+    <AppButton size="sm" class="flex-1 sm:flex-none" @click="router.navigate({ to: '/app/import' })">
       <template #left>
         <Plus class="h-3.5 w-3.5" aria-hidden="true" />
       </template>

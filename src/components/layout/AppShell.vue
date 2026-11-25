@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch, type Ref } from 'vue'
 import { Outlet, useRouter, useRouterState } from '@tanstack/vue-router'
-import { ChevronLeft, ChevronRight, Menu } from '@lucide/vue'
+import { ChevronLeft, ChevronRight } from '@lucide/vue'
 import AppSidebar from './AppSidebar.vue'
 import AppSheet from '@/components/ui/AppSheet.vue'
 import { getSession } from '@/lib/mockApi'
 import { hydrateAgents } from '@/lib/agentVault'
 import {
+  mobileNavOpen,
   persistSidebarWidth,
   setSidebarWidth,
   sidebarCollapsed,
@@ -18,7 +19,6 @@ import {
 
 const router = useRouter()
 const session = getSession()
-const mobileOpen = ref(false)
 const pathname = useRouterState({ select: (state): string => state.location.pathname }) as Ref<string>
 const isAssistant = computed<boolean>(() => pathname.value === '/app/assistant')
 const isResizing = ref(false)
@@ -80,7 +80,7 @@ onUnmounted(() => {
 })
 
 watch(pathname, () => {
-  mobileOpen.value = false
+  mobileNavOpen.value = false
 })
 </script>
 
@@ -162,27 +162,17 @@ watch(pathname, () => {
       </main>
     </div>
 
-    <!-- Mobile Drawer Toggle -->
-    <button
-      type="button"
-      class="fixed left-3 top-3 z-40 inline-flex h-10 w-10 items-center justify-center rounded-lg bg-white/90 text-ink-soft backdrop-blur transition hover:bg-ink-100 lg:hidden"
-      aria-label="เปิดเมนู"
-      @click="mobileOpen = true"
-    >
-      <Menu class="h-5 w-5" aria-hidden="true" />
-    </button>
-
     <!-- Mobile Drawer -->
     <AppSheet
-      :open="mobileOpen"
+      :open="mobileNavOpen"
       title="เมนูหลัก"
       side="left"
       hide-header
       :padded="false"
       width="w-[280px]"
-      @update:open="mobileOpen = $event"
+      @update:open="mobileNavOpen = $event"
     >
-      <AppSidebar closable @close="mobileOpen = false" />
+      <AppSidebar closable @close="mobileNavOpen = false" />
     </AppSheet>
   </div>
 </template>
