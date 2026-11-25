@@ -119,12 +119,6 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleShortcut))
               Docs
             </Link>
             <Link
-              to="/pricing"
-              class="inline-flex h-7 shrink-0 items-center rounded-full px-2.5 text-[12.5px] font-medium text-muted transition hover:bg-surface hover:text-ink"
-            >
-              {{ t('policyPage.navPricing') }}
-            </Link>
-            <Link
               to="/policy#terms"
               class="inline-flex h-7 shrink-0 items-center rounded-full px-2.5 text-[12.5px] font-medium text-muted transition hover:bg-surface hover:text-ink"
             >

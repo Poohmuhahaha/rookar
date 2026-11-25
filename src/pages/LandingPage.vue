@@ -31,7 +31,7 @@ const faqs = [
   },
   {
     q: 'ช่วง Closed Trial มีค่าใช้จ่ายหรือไม่?',
-    a: 'ไม่มีค่าใช้จ่ายใดๆ ทั้งสิ้นครับ ผู้ประกอบการที่ได้รับคัดเลือกเข้าร่วม Closed Trial จะได้ใช้งานฟีเจอร์ระดับ Pro ครบทุกมิติฟรีโดยไม่มีข้อผูกมัด',
+    a: 'ไม่มีค่าใช้จ่ายใดๆ ทั้งสิ้นครับ ผู้ประกอบการที่ได้รับคัดเลือกเข้าร่วม Closed Trial จะได้ใช้งานฟีเจอร์ครบทุกมิติฟรีโดยไม่มีข้อผูกมัด',
   },
 ]
 
@@ -179,7 +179,6 @@ const previewKpis = [
           <nav class="hidden items-center gap-7 text-[14px] font-medium text-muted md:flex 3xl:gap-8">
             <a href="#features" class="transition hover:text-ink">ฟีเจอร์เด่น</a>
             <a href="#how-it-works" class="transition hover:text-ink">ขั้นตอนการทำงาน</a>
-            <Link to="/pricing" class="transition hover:text-ink">ตารางราคา</Link>
             <a href="#faq" class="transition hover:text-ink">คำถามพบบ่อย</a>
             <Link to="/docs" class="transition hover:text-ink">Docs</Link>
           </nav>
@@ -611,7 +610,7 @@ const previewKpis = [
               พร้อมเห็นตัวเลขธุรกิจของคุณชัดเจนขึ้นแล้วหรือยัง?
             </h2>
             <p class="mx-auto mt-4 max-w-xl text-[14px] leading-relaxed text-white/65 2xl:max-w-2xl">
-              สมัครเข้าร่วม Closed Trial วันนี้ เพื่อรับสิทธิ์ใช้งาน ROOKAR Pro ฟรีตลอดช่วงทดสอบ
+              สมัครเข้าร่วม Closed Trial วันนี้ เพื่อรับสิทธิ์ใช้งาน ROOKAR ฟรีตลอดช่วงทดสอบ
             </p>
             <div class="mt-8 flex flex-col items-stretch justify-center gap-3 sm:flex-row sm:items-center">
               <Link
@@ -640,7 +639,6 @@ const previewKpis = [
           <span class="text-faint">© 2569 ROOKAR · เวอร์ชันทดลอง</span>
         </div>
         <div class="flex items-center gap-6">
-          <Link to="/pricing" class="transition hover:text-ink">ตารางราคา</Link>
           <Link to="/login" class="transition hover:text-ink">เข้าสู่ระบบ</Link>
           <a href="mailto:hello@rookar.co" class="transition hover:text-ink">ติดต่อทีมงาน</a>
         </div>

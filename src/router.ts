@@ -26,7 +26,6 @@ const ImportPage = lazyRouteComponent(() => import('@/pages/ImportPage.vue'))
 const AssistantPage = lazyRouteComponent(() => import('@/pages/AssistantPage.vue'))
 const DataDetailPage = lazyRouteComponent(() => import('@/pages/DataDetailPage.vue'))
 const LandingPage = lazyRouteComponent(() => import('@/pages/LandingPage.vue'))
-const PricingPage = lazyRouteComponent(() => import('@/pages/PricingPage.vue'))
 const PolicyPage = lazyRouteComponent(() => import('@/pages/PolicyPage.vue'))
 const DocsPage = lazyRouteComponent(() => import('@/pages/DocsPage.vue'))
 
@@ -59,12 +58,6 @@ const indexRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/',
   component: LandingPage,
-})
-
-const pricingRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: '/pricing',
-  component: PricingPage,
 })
 
 const policyRoute = createRoute({
@@ -187,7 +180,6 @@ const assistantRoute = createRoute({
 
 const routeTree = rootRoute.addChildren([
   indexRoute,
-  pricingRoute,
   policyRoute,
   docsRoute,
   loginRoute,

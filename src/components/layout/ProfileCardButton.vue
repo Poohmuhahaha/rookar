@@ -14,7 +14,6 @@ const emit = defineEmits<{ close: [] }>()
 
 const router = useRouter()
 const session = getSession()
-const plan = computed(() => session?.plan ?? 'Pro')
 const name = computed(() => session?.user.name ?? 'ภีม ธีรภัทร')
 const emailPrefix = computed(() => session?.user.email?.split('@')[0] ?? 'demo')
 
@@ -43,9 +42,6 @@ function goSettings() {
         <span class="min-w-0 flex-1">
           <span class="flex items-center gap-1.5">
             <span class="truncate text-[13px] font-bold text-ink">{{ name }}</span>
-            <span class="rounded-full bg-black px-1.5 py-0.5 text-[9.5px] font-semibold text-white">
-              {{ plan }}
-            </span>
           </span>
           <span class="block truncate text-[11px] text-muted">@{{ emailPrefix }}</span>
         </span>

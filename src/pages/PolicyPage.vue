@@ -2,7 +2,6 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { Link } from '@tanstack/vue-router'
 import {
-  CreditCard,
   Home,
   LogIn,
   Mail,
@@ -239,12 +238,6 @@ onBeforeUnmount(() => {
           >
             {{ t('policyPage.privacyTitle') }}
           </a>
-          <Link
-            to="/pricing"
-            class="inline-flex h-7 shrink-0 items-center rounded-full px-2.5 text-[12.5px] font-medium text-muted transition hover:bg-surface hover:text-ink"
-          >
-            {{ t('policyPage.navPricing') }}
-          </Link>
           <a
             href="mailto:support@rookar.co"
             class="inline-flex h-7 shrink-0 items-center rounded-full px-2.5 text-[12.5px] font-medium text-muted transition hover:bg-surface hover:text-ink"
@@ -296,13 +289,6 @@ onBeforeUnmount(() => {
                 <ShieldCheck class="h-3.5 w-3.5 text-faint" aria-hidden="true" />
                 {{ t('policyPage.privacyTitle') }}
               </a>
-              <Link
-                to="/pricing"
-                class="flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-[12.5px] text-muted transition hover:bg-surface hover:text-ink"
-              >
-                <CreditCard class="h-3.5 w-3.5 text-faint" aria-hidden="true" />
-                {{ t('policyPage.navPricing') }}
-              </Link>
               <Link
                 to="/login"
                 class="flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-[12.5px] text-muted transition hover:bg-surface hover:text-ink"

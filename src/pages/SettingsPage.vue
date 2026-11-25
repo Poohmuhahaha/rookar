@@ -5,14 +5,12 @@ import {
   Bell,
   Building2,
   ChevronRight,
-  CreditCard,
   Globe2,
   LogOut,
   Mail,
   MessageSquare,
   Moon,
   ShieldCheck,
-  Sparkles,
   Sun,
   Trash2,
   Upload,
@@ -30,7 +28,6 @@ const session = getSession()
 
 const user = computed(() => session?.user)
 const business = computed(() => session?.business)
-const plan = computed(() => session?.plan ?? 'Pro')
 
 const roleLabel = computed(() => {
   if (user.value?.role === 'owner') return 'เจ้าของธุรกิจ'
@@ -125,10 +122,6 @@ function editBusiness() {
   void router.navigate({ to: '/setup' })
 }
 
-function goPricing() {
-  void router.navigate({ to: '/pricing' })
-}
-
 async function resetLocalData() {
   const ok = window.confirm('ต้องการล้างข้อมูลบัญชีทั้งหมดหรือไม่? การกระทำนี้ย้อนกลับไม่ได้')
   if (!ok) return
@@ -150,7 +143,7 @@ async function signOut() {
 <template>
   <PageHeader
     title="ตั้งค่า"
-    description="จัดการบัญชี ข้อมูลธุรกิจ แพ็กเกจ การแจ้งเตือน และความเป็นส่วนตัวของคุณ"
+    description="จัดการบัญชี ข้อมูลธุรกิจ การแจ้งเตือน และความเป็นส่วนตัวของคุณ"
   />
 
   <div class="space-y-5">
@@ -173,7 +166,6 @@ async function signOut() {
           <h2 class="text-xl font-bold tracking-tight text-ink">{{ user?.name ?? 'ผู้ใช้งาน' }}</h2>
           <p class="mt-0.5 text-[12.5px] text-muted">{{ user?.email }}</p>
           <div class="mt-2 flex flex-wrap items-center gap-1.5">
-            <AppBadge tone="success">{{ plan }}</AppBadge>
             <AppBadge tone="neutral">{{ roleLabel }}</AppBadge>
           </div>
         </div>
@@ -219,31 +211,6 @@ async function signOut() {
             <template #right>
               <ChevronRight class="h-4 w-4" aria-hidden="true" />
             </template>
-          </AppButton>
-        </div>
-      </article>
-
-      <article class="card-fade-static p-6 sm:p-7">
-        <div class="relative z-10">
-          <div class="flex items-center gap-2">
-            <CreditCard class="h-4 w-4 text-muted" aria-hidden="true" />
-            <h2 class="text-base font-bold text-ink">แพ็กเกจและการใช้งาน</h2>
-          </div>
-          <div class="mt-4 flex items-center justify-between gap-3 rounded-2xl bg-ink-50 px-4 py-4">
-            <div>
-              <p class="text-[11px] font-semibold uppercase tracking-wide text-muted">แพ็กเกจปัจจุบัน</p>
-              <p class="mt-1 text-lg font-bold text-ink">ROOKAR {{ plan }}</p>
-            </div>
-            <AppBadge tone="success">ใช้งานอยู่</AppBadge>
-          </div>
-          <p class="mt-3 text-[12px] leading-relaxed text-muted">
-            แพ็กเกจ {{ plan }} ให้คุณใช้งานแดชบอร์ด ผู้ช่วย AI และการวิเคราะห์จากข้อมูลจริง
-          </p>
-          <AppButton class="mt-5" @click="goPricing">
-            <template #left>
-              <Sparkles class="h-4 w-4" aria-hidden="true" />
-            </template>
-            ดูแพ็กเกจทั้งหมด
           </AppButton>
         </div>
       </article>
