@@ -107,6 +107,5 @@ app.route('/api/chat', chatRoutes)
 app.notFound((c) => c.json({ error: 'not found' }, 404))
 app.onError((error, c) => {
   console.error('[api] unhandled error', error)
-  const detail = c.req.path === '/api/auth/signup' && error instanceof Error ? `: ${error.message}` : ''
-  return c.json({ error: `internal server error${detail}` }, 500)
+  return c.json({ error: 'internal server error' }, 500)
 })

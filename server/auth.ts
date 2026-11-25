@@ -17,9 +17,9 @@ type BusinessRow = {
   updated_at: string
 }
 
-const PBKDF2_ITERATIONS = 600_000
+const PBKDF2_ITERATIONS = 100_000
 const PASSWORD_PREFIX = 'pbkdf2-sha256'
-export const DUMMY_PASSWORD_HASH = 'pbkdf2-sha256$600000$irtyBhD9CnZWi79tXNjjBw==$sESU8Hokh2nFjKTR6yiD6nB2O9nGl4lDzUGSViV9k4E='
+export const DUMMY_PASSWORD_HASH = 'pbkdf2-sha256$100000$PVQzAascpJJoXW4uQiAGXw==$yStZHPJsKisnzglcpflWm+IUwt9fb9O/uL7yBM3sGaY='
 
 function bytesToBase64(bytes: Uint8Array) {
   let binary = ''
