@@ -25,7 +25,7 @@ import { clientIp, enforceRateLimit } from '../security'
 export const authRoutes = new Hono<AppEnv>()
 
 authRoutes.post('/signup', async (c) => {
-  const limited = await enforceRateLimit(c, `signup:ip:${clientIp(c)}`, 5, 60 * 60 * 1000)
+  const limited = await enforceRateLimit(c, `signup:ip:${clientIp(c)}`, 500, 60 * 60 * 1000)
   if (limited) return limited
   const body = await c.req.json().catch(() => null) as {
     name?: string
