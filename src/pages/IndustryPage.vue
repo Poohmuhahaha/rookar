@@ -308,7 +308,7 @@ function askIndustry() {
   />
 
   <div class="mt-5 grid gap-5 xl:grid-cols-[1.35fr_1fr]">
-    <article class="card-fade-static p-6 sm:p-7">
+    <article class="rounded-3xl bg-[#e4e4e7] p-4 sm:p-5">
       <div class="relative z-10">
         <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
@@ -341,7 +341,7 @@ function askIndustry() {
       </div>
     </article>
 
-    <article class="card-fade-static p-6 sm:p-7">
+    <article class="rounded-3xl bg-[#e4e4e7] p-4 sm:p-5">
       <div class="relative z-10 flex h-full flex-col justify-between">
         <div>
           <p class="text-[10.5px] font-semibold uppercase tracking-wide text-muted">ถาม AI เกี่ยวกับอุตสาหกรรม</p>

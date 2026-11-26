@@ -107,7 +107,7 @@ function goToImport() {
 <template>
   <article
     v-if="loading && !benchmark"
-    class="card-fade-static mt-5 p-6 sm:p-7"
+    class="mt-5 rounded-3xl bg-[#e4e4e7] p-4 sm:p-5"
     aria-label="กำลังโหลดข้อมูลเศรษฐกิจมหภาค"
   >
     <div>
@@ -119,7 +119,7 @@ function goToImport() {
     </div>
   </article>
 
-  <article v-else-if="error && !benchmark" class="card-fade-static mt-5 p-6 sm:p-7">
+  <article v-else-if="error && !benchmark" class="mt-5 rounded-3xl bg-[#e4e4e7] p-4 sm:p-5">
     <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
       <div>
         <h2 class="text-base font-bold text-ink sm:text-lg">บริบทเศรษฐกิจมหภาค (Macro Benchmark)</h2>
@@ -138,7 +138,7 @@ function goToImport() {
     </div>
   </article>
 
-  <article v-else-if="benchmark" class="card-fade-static mt-5 p-6 sm:p-7">
+  <article v-else-if="benchmark" class="mt-5 rounded-3xl bg-[#e4e4e7] p-4 sm:p-5">
     <div class="relative z-10">
       <div class="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between">
         <div>
@@ -186,7 +186,7 @@ function goToImport() {
           <div
             v-for="card in cards"
             :key="card.key"
-            class="flex flex-col justify-between rounded-2xl bg-white/80 p-4 sm:p-5"
+            class="flex flex-col justify-between rounded-2xl bg-white p-4 sm:p-5"
           >
             <div class="flex items-start justify-between gap-2">
               <p class="text-xs font-semibold text-neutral-600 sm:text-[13px]">{{ card.label }}</p>

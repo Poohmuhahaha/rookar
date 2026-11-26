@@ -206,7 +206,7 @@ function openInsight() {
 
   <div
     v-if="data?.industry"
-    class="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-[20px] border border-ink-100/70 bg-white px-4 py-3"
+    class="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-[20px] bg-warning-soft/60 px-4 py-3"
   >
     <div class="flex min-w-0 items-center gap-3">
       <span
