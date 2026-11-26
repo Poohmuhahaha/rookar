@@ -433,18 +433,6 @@ const previewSeries: KpiPoint[] = [
                   สอดคล้องมาตรฐาน PDPA
                 </li>
               </ul>
-
-              <div class="mt-10 hidden flex-col gap-4 lg:flex 3xl:mt-12">
-                <span class="h-px w-full bg-white/10" aria-hidden="true" />
-                <div class="flex items-center justify-between gap-6">
-                  <p class="max-w-xs text-[11.5px] leading-relaxed text-white/45">
-                    “เลิกเดาจากความรู้สึก เริ่มดูจากตัวเลขที่เกิดขึ้นจริง”
-                  </p>
-                  <p class="text-[10.5px] font-medium uppercase tracking-[0.18em] text-white/40">
-                    Business, clearly.
-                  </p>
-                </div>
-              </div>
             </div>
 
             <!-- Live workspace preview -->

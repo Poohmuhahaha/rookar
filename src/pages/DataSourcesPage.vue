@@ -206,9 +206,9 @@ function downloadTemplate() {
       </DropdownMenuTrigger>
       <DropdownMenuPortal>
         <DropdownMenuContent
-          align="end"
+          align="start"
           :side-offset="8"
-          class="z-[70] max-h-72 w-60 overflow-y-auto rounded-2xl bg-white p-1.5 shadow-[0_12px_36px_rgba(0,0,0,0.12)] ring-1 ring-black/[0.06] focus:outline-none"
+          class="z-[70] max-h-72 w-[calc(100vw-2rem)] overflow-y-auto rounded-2xl bg-white p-1.5 shadow-[0_12px_36px_rgba(0,0,0,0.12)] ring-1 ring-black/[0.06] focus:outline-none sm:w-60"
         >
           <DropdownMenuLabel class="px-3 py-2 text-[10.5px] font-semibold uppercase tracking-wide text-muted">
             กรองตามประเภท

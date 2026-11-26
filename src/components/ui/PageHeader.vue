@@ -31,14 +31,18 @@ const emit = defineEmits<{ back: [] }>()
         </button>
         <MobileNavButton v-else class="lg:hidden" />
         <slot name="leading" />
-        <h1 class="flex flex-wrap items-center gap-x-2 gap-y-1 text-[24px] font-semibold tracking-[-0.02em] text-ink">
-          <template v-if="breadcrumb">
-            <Link :to="breadcrumb.to" class="text-muted transition hover:text-ink">{{ breadcrumb.label }}</Link>
-            <ChevronRight class="h-4 w-4 shrink-0 text-faint" aria-hidden="true" />
-          </template>
-          <span>{{ title }}</span>
-        </h1>
-        <InfoTip v-if="description" :text="description" side="bottom" />
+        <div class="flex min-w-0 flex-1 items-center gap-1.5">
+          <h1 class="flex min-w-0 flex-nowrap items-center gap-x-2 text-[22px] font-semibold leading-tight tracking-[-0.02em] text-ink lg:text-[24px]">
+            <template v-if="breadcrumb">
+              <Link :to="breadcrumb.to" class="shrink-0 text-muted transition hover:text-ink">{{ breadcrumb.label }}</Link>
+              <ChevronRight class="h-4 w-4 shrink-0 text-faint" aria-hidden="true" />
+            </template>
+            <span class="truncate">{{ title }}</span>
+          </h1>
+          <span v-if="description" class="shrink-0">
+            <InfoTip :text="description" side="bottom" />
+          </span>
+        </div>
       </div>
     </div>
     <div v-if="$slots.actions" class="flex shrink-0 flex-wrap items-center gap-2">

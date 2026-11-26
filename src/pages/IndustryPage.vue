@@ -165,10 +165,12 @@ function askIndustry() {
         <DropdownMenuTrigger as-child>
           <button
             type="button"
-            class="inline-flex h-10 items-center gap-2 rounded-full bg-[#f4f5f7] px-4 text-[12px] font-semibold text-ink transition hover:bg-[#eceef1] focus-visible:bg-[#eceef1] focus-visible:outline-none"
+            class="inline-flex h-10 w-full items-center justify-between gap-2 rounded-full bg-[#f4f5f7] px-4 text-[12px] font-semibold text-ink transition hover:bg-[#eceef1] focus-visible:bg-[#eceef1] focus-visible:outline-none sm:w-auto"
           >
-            <component :is="industryIcons[selectedProfile.id]" class="h-4 w-4 text-muted" aria-hidden="true" />
-            {{ selectedProfile.shortLabel }}
+            <span class="inline-flex items-center gap-2">
+              <component :is="industryIcons[selectedProfile.id]" class="h-4 w-4 text-muted" aria-hidden="true" />
+              {{ selectedProfile.shortLabel }}
+            </span>
             <ChevronDown class="h-4 w-4 text-muted" aria-hidden="true" />
           </button>
         </DropdownMenuTrigger>
@@ -176,7 +178,7 @@ function askIndustry() {
           <DropdownMenuContent
             align="start"
             :side-offset="8"
-            class="z-[70] min-w-[320px] rounded-2xl bg-white p-1.5 shadow-[0_12px_36px_rgba(0,0,0,0.12)] ring-1 ring-black/[0.06] focus:outline-none"
+            class="z-[70] w-[calc(100vw-2rem)] rounded-2xl bg-white p-1.5 shadow-[0_12px_36px_rgba(0,0,0,0.12)] ring-1 ring-black/[0.06] focus:outline-none sm:w-auto sm:min-w-[320px]"
           >
             <DropdownMenuLabel class="px-3 py-2 text-[10.5px] font-semibold uppercase tracking-wide text-muted">
               เลือกอุตสาหกรรม

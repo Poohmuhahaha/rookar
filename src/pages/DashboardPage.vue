@@ -142,7 +142,7 @@ function openInsight() {
         <DropdownMenuTrigger as-child>
           <button
             type="button"
-            class="inline-flex h-10 w-full items-center justify-between gap-2 rounded-full bg-[#f4f5f7] px-4 text-[12px] font-semibold text-ink transition hover:bg-[#eceef1] focus-visible:bg-[#eceef1] focus-visible:outline-none sm:w-auto"
+            class="inline-flex h-10 min-w-0 flex-1 items-center justify-between gap-2 rounded-full bg-[#f4f5f7] px-4 text-[12px] font-semibold text-ink transition hover:bg-[#eceef1] focus-visible:bg-[#eceef1] focus-visible:outline-none sm:w-auto sm:flex-none"
           >
             <span class="inline-flex items-center gap-2">
               <component :is="scopeIcon" class="h-4 w-4 text-muted" aria-hidden="true" />
@@ -153,9 +153,9 @@ function openInsight() {
         </DropdownMenuTrigger>
         <DropdownMenuPortal>
           <DropdownMenuContent
-            align="end"
+            align="start"
             :side-offset="8"
-            class="z-[70] min-w-[280px] rounded-2xl bg-white p-1.5 shadow-[0_12px_36px_rgba(0,0,0,0.12)] ring-1 ring-black/[0.06] focus:outline-none"
+            class="z-[70] w-[calc(100vw-2rem)] rounded-2xl bg-white p-1.5 shadow-[0_12px_36px_rgba(0,0,0,0.12)] ring-1 ring-black/[0.06] focus:outline-none sm:w-auto sm:min-w-[240px]"
           >
             <DropdownMenuLabel class="px-3 py-2 text-[10.5px] font-semibold uppercase tracking-wide text-muted">
               เลือกอุตสาหกรรม
@@ -189,13 +189,13 @@ function openInsight() {
           </DropdownMenuContent>
         </DropdownMenuPortal>
       </DropdownMenuRoot>
-      <AppButton variant="secondary" @click="router.navigate({ to: '/app/import' })">
+      <AppButton variant="secondary" class="shrink-0" @click="router.navigate({ to: '/app/import' })">
         <template #left>
           <Upload class="h-4 w-4" aria-hidden="true" />
         </template>
         นำเข้าข้อมูล
       </AppButton>
-      <AppButton @click="openAssistant">
+      <AppButton class="w-full sm:w-auto" @click="openAssistant">
         <template #left>
           <Sparkles class="h-4 w-4" aria-hidden="true" />
         </template>

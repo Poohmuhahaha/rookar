@@ -808,7 +808,8 @@ async function copyMessage(text: string) {
     class="relative flex min-w-0 flex-1 flex-col bg-white"
     :class="messages.length === 0 ? 'overflow-y-auto' : 'overflow-hidden'"
   >
-    <MobileNavButton class="absolute left-3 top-3 z-20 lg:hidden" />
+    <div class="pointer-events-none absolute inset-x-0 top-0 z-10 h-16 bg-white xl:hidden" aria-hidden="true" />
+    <MobileNavButton class="absolute left-3 top-3 z-20 rounded-full bg-[#f4f5f7] lg:hidden" />
     <button
       type="button"
       class="absolute right-3 top-3 z-20 inline-flex h-9 w-9 items-center justify-center rounded-full bg-[#f4f5f7] text-ink transition hover:bg-[#eceef1] xl:hidden"

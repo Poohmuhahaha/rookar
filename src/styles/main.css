@@ -606,6 +606,17 @@
   border-color: transparent !important;
 }
 
+/* Floating menus need elevation so they don't blend into the page */
+[data-reka-menu-content],
+[data-reka-select-content] {
+  box-shadow:
+    0 16px 40px rgba(0, 0, 0, 0.16),
+    0 2px 8px rgba(0, 0, 0, 0.06) !important;
+  -webkit-box-shadow:
+    0 16px 40px rgba(0, 0, 0, 0.16),
+    0 2px 8px rgba(0, 0, 0, 0.06) !important;
+}
+
 /* Large-screen typography scale */
 @media (min-width: 1440px) and (max-width: 1919px) {
     .text-\[9px\] { font-size: 9.5px; line-height: 1.4; }
