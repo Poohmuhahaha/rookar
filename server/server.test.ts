@@ -4,6 +4,7 @@ process.env.DATABASE_URL = ':memory:'
 process.env.NODE_ENV = 'test'
 process.env.AI_PROVIDER = 'mock'
 process.env.OPENAI_API_KEY = ''
+process.env.MEDIA_DIR = `/tmp/rookar-media-test-${process.pid}`
 
 const { initBunRuntime } = await import('./bunDb')
 initBunRuntime({ databaseUrl: ':memory:', nodeEnv: 'test', aiProvider: 'mock', openaiApiKey: '', allowDevReset: true })
@@ -89,6 +90,35 @@ describe('ROOKAR API', () => {
     const dashboardResponse = await app.request('/api/dashboard?range=6m&industry=fnb', { headers: { Cookie: cookie } })
     const dashboard = await dashboardResponse.json() as { dashboard: unknown }
     expect(dashboard.dashboard).toBeNull()
+  })
+
+  it('uploads an avatar to the media store and sets it on the session', async () => {
+    const pngBase64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Z2Z8AAAAASUVORK5CYII='
+    const png = Uint8Array.from(atob(pngBase64), (char) => char.charCodeAt(0))
+    const form = new FormData()
+    form.set('file', new File([png], 'avatar.png', { type: 'image/png' }))
+    form.set('kind', 'avatar')
+
+    const upload = await app.request('/api/media', {
+      method: 'POST',
+      headers: { Cookie: cookie, Origin: 'http://localhost:5173' },
+      body: form,
+    })
+    expect(upload.status).toBe(201)
+    const uploaded = await upload.json() as { media: { id: string; url: string } }
+    expect(uploaded.media.url).toBe(`/api/media/${uploaded.media.id}`)
+
+    const update = await jsonRequest('/api/me', { avatarMediaId: uploaded.media.id }, 'PATCH')
+    expect(update.status).toBe(200)
+    const session = await update.json() as { session: { user: { avatarUrl: string } } }
+    expect(session.session.user.avatarUrl).toBe(`/api/media/${uploaded.media.id}`)
+
+    const served = await app.request(`/api/media/${uploaded.media.id}`, {
+      headers: { Cookie: cookie },
+    })
+    expect(served.status).toBe(200)
+    expect(served.headers.get('content-type')).toBe('image/png')
+    expect(served.headers.get('cache-control')).toContain('private')
   })
 
   it('imports real CSV data scoped by industry', async () => {

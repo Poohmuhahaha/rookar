@@ -29,7 +29,7 @@ import {
 import AppButton from '@/components/ui/AppButton.vue'
 import AppModal from '@/components/ui/AppModal.vue'
 import { getSession, logout } from '@/lib/mockApi'
-import { profileAvatar, setProfileAvatar } from '@/lib/profile'
+import { profileAvatar, uploadProfileAvatar } from '@/lib/profile'
 import { useToast } from '@/lib/toast'
 
 const props = withDefaults(defineProps<{ variant?: 'default' | 'assistant' }>(), {
@@ -52,21 +52,23 @@ function triggerAvatarPicker() {
   avatarInput.value?.click()
 }
 
-function handleAvatarUpload(event: Event) {
+async function handleAvatarUpload(event: Event) {
   const input = event.target as HTMLInputElement
   const file = input.files?.[0]
   if (!file) return
   if (!file.type.startsWith('image/')) {
     toast.error('ไฟล์ไม่ถูกต้อง', 'กรุณาเลือกไฟล์รูปภาพ (JPG, PNG, WebP)')
+    input.value = ''
     return
   }
-  const reader = new FileReader()
-  reader.onload = (e) => {
-    const dataUrl = e.target?.result as string
-    setProfileAvatar(dataUrl)
+  try {
+    await uploadProfileAvatar(file)
     toast.success('อัปเดตรูปโปรไฟล์สำเร็จ', 'บันทึกรูปโปรไฟล์ใหม่ของคุณเรียบร้อยแล้ว')
+  } catch (error) {
+    toast.error('อัปโหลดรูปไม่สำเร็จ', error instanceof Error ? error.message : 'กรุณาลองใหม่')
+  } finally {
+    input.value = ''
   }
-  reader.readAsDataURL(file)
 }
 
 // Modal types

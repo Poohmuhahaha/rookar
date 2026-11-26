@@ -1,4 +1,4 @@
--- ROOKAR D1 bootstrap: apply migrations 0001-0009 on a FRESH database.
+-- ROOKAR D1 bootstrap: apply migrations 0001-0010 on a FRESH database.
 -- Paste this entire file into Cloudflare Dashboard -> D1 -> rookar_db -> Console -> Execute.
 
 -- ============================================================
@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS users (
     password_hash TEXT NOT NULL,
     role TEXT NOT NULL DEFAULT 'owner',
     avatar_url TEXT,
+    avatar_media_id TEXT,
     plan TEXT NOT NULL DEFAULT 'Free',
     onboarding_complete INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL
@@ -183,6 +184,39 @@ CREATE TABLE IF NOT EXISTS import_preview_rows (
 CREATE INDEX IF NOT EXISTS idx_import_previews_expires ON import_previews(expires_at);
 
 -- ============================================================
+-- migrations/0010_media_r2.sql
+-- ============================================================
+CREATE TABLE IF NOT EXISTS media_files (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL CHECK (kind IN ('avatar','chat_image','attachment','plan_image')),
+  object_key TEXT NOT NULL UNIQUE,
+  thumb_key TEXT,
+  file_name TEXT NOT NULL,
+  mime_type TEXT NOT NULL,
+  size_bytes INTEGER NOT NULL CHECK (size_bytes > 0),
+  sha256 TEXT NOT NULL,
+  width INTEGER,
+  height INTEGER,
+  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('pending','active','deleted')),
+  created_at TEXT NOT NULL,
+  deleted_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_media_user_created ON media_files(user_id, status, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_media_status_created ON media_files(status, created_at);
+CREATE INDEX IF NOT EXISTS idx_media_sha ON media_files(user_id, sha256);
+
+CREATE TABLE IF NOT EXISTS media_links (
+  media_id TEXT NOT NULL REFERENCES media_files(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  owner_type TEXT NOT NULL CHECK (owner_type IN ('avatar','message','plan','scenario')),
+  owner_id TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (media_id, owner_type, user_id, owner_id)
+);
+CREATE INDEX IF NOT EXISTS idx_media_links_owner ON media_links(user_id, owner_type, owner_id);
+
+-- ============================================================
 -- Record applied migrations so future wrangler migrations stay in sync
 -- ============================================================
 CREATE TABLE IF NOT EXISTS d1_migrations (
@@ -199,4 +233,5 @@ INSERT OR IGNORE INTO d1_migrations (name) VALUES
   ('0006_0006_user_username.sql'),
   ('0007_0007_source_industry_confidence.sql'),
   ('0008_0008_conversation_composite_key.sql'),
-  ('0009_0009_rate_limits_preview_rows.sql');
+  ('0009_0009_rate_limits_preview_rows.sql'),
+  ('0010_media_r2.sql');

@@ -16,6 +16,7 @@ import { conversationRoutes } from './routes/conversations'
 import { agentRoutes } from './routes/agents'
 import { meRoutes } from './routes/me'
 import { chatRoutes } from './routes/chat'
+import { mediaRoutes } from './routes/media'
 
 export const app = new Hono<AppEnv>()
 
@@ -32,6 +33,7 @@ app.use('/api/agents', bodyLimit({ maxSize: 1024 * 1024, onError: tooLarge }))
 app.use('/api/business', bodyLimit({ maxSize: 64 * 1024, onError: tooLarge }))
 app.use('/api/me', bodyLimit({ maxSize: 64 * 1024, onError: tooLarge }))
 app.use('/api/imports/preview', bodyLimit({ maxSize: 12 * 1024 * 1024, onError: tooLarge }))
+app.use('/api/media', bodyLimit({ maxSize: 10 * 1024 * 1024, onError: tooLarge }))
 
 app.use('*', async (c, next) => {
   c.set('appUrl', env.appUrl || new URL(c.req.url).origin)
@@ -46,7 +48,8 @@ app.use('/api/*', async (c, next) => {
     const contentType = c.req.header('content-type')?.toLowerCase() ?? ''
     const allowedType =
       contentType.startsWith('application/json') ||
-      (path === '/api/imports/preview' && contentType.startsWith('multipart/form-data'))
+      (path === '/api/imports/preview' && contentType.startsWith('multipart/form-data')) ||
+      (path === '/api/media' && contentType.startsWith('multipart/form-data'))
     if (contentType && !allowedType) {
       return c.json({ error: 'unsupported content type' }, 415)
     }
@@ -87,7 +90,9 @@ app.use('/api/*', async (c, next) => {
 
 app.use('/api/*', async (c, next) => {
   await next()
-  if (c.req.method === 'GET') c.header('Cache-Control', 'no-store')
+  if (c.req.method === 'GET' && !new URL(c.req.url).pathname.startsWith('/api/media/')) {
+    c.header('Cache-Control', 'no-store')
+  }
 })
 
 app.route('/api/auth', authRoutes)
@@ -103,6 +108,7 @@ app.route('/api/conversations', conversationRoutes)
 app.route('/api/agents', agentRoutes)
 app.route('/api/me', meRoutes)
 app.route('/api/chat', chatRoutes)
+app.route('/api/media', mediaRoutes)
 
 app.notFound((c) => c.json({ error: 'not found' }, 404))
 app.onError((error, c) => {

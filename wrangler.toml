@@ -22,3 +22,7 @@ OPENAI_USER_AGENT = "rookar-agent/1.0"
 binding = "DB"
 database_name = "rookar_db"
 database_id = "f9c8cc02-55ec-4c06-a6f7-cfcae2047692"
+
+[[r2_buckets]]
+binding = "MEDIA"
+bucket_name = "rookar-media"

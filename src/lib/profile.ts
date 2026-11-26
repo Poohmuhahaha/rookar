@@ -1,6 +1,7 @@
 import { computed, ref, watch } from 'vue'
 import { getSession, setSession } from './session'
 import { apiFetch } from './api/client'
+import { uploadImage } from './media'
 import type { Session } from '@/types'
 
 const avatarOverride = ref<string | null>(null)
@@ -28,4 +29,19 @@ export function setProfileAvatar(url: string) {
     method: 'PATCH',
     body: JSON.stringify({ avatarUrl: url }),
   }).then((data) => setSession(data.session)).catch(() => undefined)
+}
+
+export async function uploadProfileAvatar(file: File) {
+  const media = await uploadImage(file, {
+    kind: 'avatar',
+    maxEdge: 512,
+    quality: 0.85,
+    fileName: 'avatar.webp',
+  })
+  const data = await apiFetch<{ session: Session }>('/me', {
+    method: 'PATCH',
+    body: JSON.stringify({ avatarMediaId: media.id }),
+  })
+  setSession(data.session)
+  avatarOverride.value = null
 }

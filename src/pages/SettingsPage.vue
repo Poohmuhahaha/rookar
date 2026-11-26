@@ -18,7 +18,7 @@ import PageHeader from '@/components/ui/PageHeader.vue'
 import AppBadge from '@/components/ui/AppBadge.vue'
 import AppButton from '@/components/ui/AppButton.vue'
 import { getSession, logout, resetAccountData } from '@/lib/mockApi'
-import { profileAvatar, setProfileAvatar } from '@/lib/profile'
+import { profileAvatar, uploadProfileAvatar } from '@/lib/profile'
 import { locale, setLocale, t } from '@/lib/i18n'
 import { useToast } from '@/lib/toast'
 
@@ -80,22 +80,23 @@ function pickAvatar() {
   avatarInput.value?.click()
 }
 
-function handleAvatar(event: Event) {
+async function handleAvatar(event: Event) {
   const input = event.target as HTMLInputElement
   const file = input.files?.[0]
   if (!file) return
   if (!file.type.startsWith('image/')) {
     toast.error('ไฟล์ไม่ถูกต้อง', 'กรุณาเลือกไฟล์รูปภาพ (JPG, PNG, WebP)')
+    input.value = ''
     return
   }
-  const reader = new FileReader()
-  reader.onload = (e) => {
-    const dataUrl = e.target?.result as string
-    setProfileAvatar(dataUrl)
+  try {
+    await uploadProfileAvatar(file)
     toast.success('อัปเดตรูปโปรไฟล์สำเร็จ')
+  } catch (error) {
+    toast.error('อัปโหลดรูปไม่สำเร็จ', error instanceof Error ? error.message : 'กรุณาลองใหม่')
+  } finally {
+    input.value = ''
   }
-  reader.readAsDataURL(file)
-  input.value = ''
 }
 
 function toggleLanguage() {
