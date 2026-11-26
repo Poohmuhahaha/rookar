@@ -272,7 +272,7 @@ const previewSeries: KpiPoint[] = [
             <template v-if="session">
               <Link
                 to="/app"
-                class="hidden h-9 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-full bg-black px-3 text-[13px] font-semibold text-white transition-colors hover:bg-neutral-800 min-[360px]:inline-flex sm:h-10 sm:px-4 sm:text-[14px] 3xl:h-12 3xl:px-5"
+                class="hidden h-9 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-full bg-black px-3 text-[13px] font-semibold text-white transition-colors hover:bg-neutral-800 sm:inline-flex sm:h-10 sm:px-4 sm:text-[14px] 3xl:h-12 3xl:px-5"
               >
                 ไปที่แดชบอร์ด
                 <ArrowRight class="h-4 w-4" aria-hidden="true" />

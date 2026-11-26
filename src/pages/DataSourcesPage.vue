@@ -376,12 +376,7 @@ function downloadTemplate() {
           <div class="min-w-0 flex-1">
             <p class="text-[13px] font-semibold text-ink">{{ source.name }}</p>
             <p class="mt-0.5 truncate text-[11px] text-muted">{{ source.fileName }} · {{ source.period }}</p>
-            <div class="mt-2 flex flex-wrap items-center gap-1.5">
-              <span :class="cn('inline-flex h-[22px] w-[92px] items-center justify-center rounded-full px-2.5 text-center text-[11px] font-semibold', typeMeta[source.type].className)">
-                {{ typeMeta[source.type].label }}
-              </span>
-              <AppBadge :tone="qualityMeta[source.quality].tone">{{ qualityMeta[source.quality].label }}</AppBadge>
-              <span class="text-[10.5px] text-muted">{{ formatNumber(source.rowCount) }} แถว · {{ timeAgo(source.updatedAt) }}</span>
+            <div class="mt-2">
               <span @click.stop>
                 <IndustryPicker
                   :model-value="source.industryId ?? null"
@@ -389,6 +384,13 @@ function downloadTemplate() {
                   @update:model-value="assignIndustry(source, $event)"
                 />
               </span>
+            </div>
+            <div class="mt-2 flex flex-wrap items-center gap-1.5">
+              <span :class="cn('inline-flex h-[22px] w-[92px] items-center justify-center rounded-full px-2.5 text-center text-[11px] font-semibold', typeMeta[source.type].className)">
+                {{ typeMeta[source.type].label }}
+              </span>
+              <AppBadge :tone="qualityMeta[source.quality].tone">{{ qualityMeta[source.quality].label }}</AppBadge>
+              <span class="text-[10.5px] text-muted">{{ formatNumber(source.rowCount) }} แถว · {{ timeAgo(source.updatedAt) }}</span>
             </div>
           </div>
           <button
