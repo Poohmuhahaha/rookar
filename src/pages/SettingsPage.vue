@@ -9,7 +9,6 @@ import {
   LogOut,
   Mail,
   MessageSquare,
-  Moon,
   ShieldCheck,
   Sun,
   Trash2,
@@ -41,7 +40,6 @@ const SETTINGS_KEY = 'rookar.settings.v1'
 const saved = (() => {
   try {
     return JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? '{}') as {
-      theme?: 'light' | 'dark'
       notifications?: Record<string, boolean>
     }
   } catch {
@@ -49,7 +47,6 @@ const saved = (() => {
   }
 })()
 
-const theme = ref<'light' | 'dark'>(saved.theme ?? 'light')
 const notifications = reactive({
   anomaly: saved.notifications?.anomaly ?? true,
   weeklySummary: saved.notifications?.weeklySummary ?? true,
@@ -58,12 +55,11 @@ const notifications = reactive({
 })
 
 watch(
-  [theme, notifications],
+  notifications,
   () => {
     localStorage.setItem(
       SETTINGS_KEY,
       JSON.stringify({
-        theme: theme.value,
         notifications,
       }),
     )
@@ -100,11 +96,6 @@ function handleAvatar(event: Event) {
   }
   reader.readAsDataURL(file)
   input.value = ''
-}
-
-function toggleTheme() {
-  theme.value = theme.value === 'light' ? 'dark' : 'light'
-  toast.success('บันทึกการตั้งค่าธีมแล้ว', theme.value === 'light' ? 'โหมดสว่าง' : 'โหมดมืด')
 }
 
 function toggleLanguage() {
@@ -214,35 +205,13 @@ async function signOut() {
         </div>
       </article>
 
-      <article class="card-fade-static p-6 sm:p-7">
+      <article class="card-fade-static p-6 sm:p-7 lg:hidden">
         <div class="relative z-10">
           <div class="flex items-center gap-2">
             <Sun class="h-4 w-4 text-muted" aria-hidden="true" />
             <h2 class="text-base font-bold text-ink">การตั้งค่าทั่วไป</h2>
           </div>
           <div class="mt-3">
-            <div class="flex items-center justify-between gap-4 border-b border-black/5 py-3.5">
-              <div class="flex items-center gap-2.5">
-                <component :is="theme === 'light' ? Sun : Moon" class="h-4 w-4 text-muted" aria-hidden="true" />
-                <div>
-                  <p class="text-[12.5px] font-medium text-ink">ธีม</p>
-                  <p class="text-[11px] text-muted">{{ theme === 'light' ? 'โหมดสว่าง' : 'โหมดมืด' }}</p>
-                </div>
-              </div>
-              <button
-                type="button"
-                role="switch"
-                :aria-checked="theme === 'dark'"
-                class="relative h-6 w-11 shrink-0 rounded-full transition-colors"
-                :class="theme === 'dark' ? 'bg-black' : 'bg-neutral-300'"
-                @click="toggleTheme"
-              >
-                <span
-                  class="absolute top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-[left]"
-                  :class="theme === 'dark' ? 'left-[22px]' : 'left-0.5'"
-                />
-              </button>
-            </div>
             <div class="flex items-center justify-between gap-4 py-3.5">
               <div class="flex items-center gap-2.5">
                 <Globe2 class="h-4 w-4 text-muted" aria-hidden="true" />

@@ -185,6 +185,80 @@ const PAIRS: Pair[] = [
   ['ในหน้านี้', 'On this page'],
   ['กลับไปเข้าสู่ระบบ', 'Back to sign in'],
 
+  // Setup wizard
+  ['ตั้งค่าธุรกิจ', 'Business setup'],
+  ['ต้องการความช่วยเหลือ?', 'Need help?'],
+  ['ข้อมูลนี้ช่วยให้ ROOKAR ตีความตัวเลขและให้คำแนะนำที่ตรงกับธุรกิจของคุณมากขึ้น', 'This helps ROOKAR interpret your numbers and tailor recommendations to your business.'],
+  ['พื้นฐาน', 'Basics'],
+  ['เป้าหมาย', 'Goals'],
+  ['สิ่งที่อยากได้', 'What you want'],
+  ['พร้อมเริ่ม', 'Ready to start'],
+  ['เล่าธุรกิจของคุณให้เรารู้จัก', 'Tell us about your business'],
+  ['ชื่อธุรกิจ', 'Business name'],
+  ['เช่น บลูมมิ่ง คอฟฟี่', 'e.g. Blooming Coffee'],
+  ['จำนวนพนักงาน', 'Employees'],
+  ['เลือกจำนวน', 'Select team size'],
+  ['รายได้ต่อปี (โดยประมาณ)', 'Annual revenue (approx.)'],
+  ['เลือกช่วงรายได้', 'Select revenue range'],
+  ['1 คน (เจ้าของคนเดียว)', '1 person (owner only)'],
+  ['2–5 คน', '2–5 people'],
+  ['6–10 คน', '6–10 people'],
+  ['11–30 คน', '11–30 people'],
+  ['31–50 คน', '31–50 people'],
+  ['มากกว่า 50 คน', 'More than 50 people'],
+  ['ยังไม่ถึง 1 ล้านบาท / ปี', 'Under THB 1M / year'],
+  ['1–3 ล้านบาท / ปี', 'THB 1–3M / year'],
+  ['3–10 ล้านบาท / ปี', 'THB 3–10M / year'],
+  ['10–50 ล้านบาท / ปี', 'THB 10–50M / year'],
+  ['มากกว่า 50 ล้านบาท / ปี', 'Over THB 50M / year'],
+  ['ยังไม่ถึง 1 ล้านบาท', 'Under THB 1M'],
+  ['1-3 ล้านบาท', 'THB 1–3M'],
+  ['3-10 ล้านบาท', 'THB 3–10M'],
+  ['10-50 ล้านบาท', 'THB 10–50M'],
+  ['มากกว่า 50 ล้านบาท', 'Over THB 50M'],
+  ['ประเภทธุรกิจ', 'Business type'],
+  ['ใช้เป็นข้อมูลประกอบการวิเคราะห์ ไม่ได้ใช้ยืนยันตัวตนหรือยื่นภาษี', 'Used for analysis only — not for identity verification or tax filing.'],
+  ['ใช้เพื่อปรับคำแนะนำให้เหมาะกับขนาดธุรกิจของคุณ', 'Used to tailor recommendations to your business size.'],
+  ['ในกลุ่มนี้', 'In this group'],
+  ['กรุณากรอกชื่อธุรกิจ', 'Please enter your business name.'],
+  ['เลือกประเภทธุรกิจเพื่อไปต่อ', 'Choose a business type to continue.'],
+  ['เลือกจำนวนพนักงาน', 'Select the number of employees.'],
+  ['เลือกเป้าหมายอย่างน้อย 1 ข้อ', 'Choose at least one goal.'],
+  ['ข้ามไปก่อน', 'Skip for now'],
+  ['ต่อไป', 'Next'],
+  ['อะไรสำคัญที่สุดสำหรับคุณ?', 'What matters most to you?'],
+  ['เลือกได้สูงสุด 3 เป้าหมาย เราจะใช้จัดลำดับข้อมูลและคำแนะนำในหน้าภาพรวม', 'Pick up to 3 goals. We use them to prioritize data and recommendations on your overview.'],
+  ['เลือกแล้ว ', 'Selected '],
+  [' จาก 3 เป้าหมาย', ' of 3 goals'],
+  ['เพิ่มกำไร', 'Increase profit'],
+  ['ทำให้ทุกบาทที่ขายได้เหลือเป็นกำไรมากขึ้น', 'Turn more of every baht you earn into profit.'],
+  ['เพิ่มยอดขาย', 'Grow sales'],
+  ['เติบโตอย่างมีแผน ไม่ใช่แค่รอลูกค้า', 'Grow with a plan, not just wait for customers.'],
+  ['ลดต้นทุน', 'Reduce costs'],
+  ['รู้ว่าต้นทุนไหนกินกำไรและลดได้ตรงจุด', 'See which costs eat into profit and cut them where it matters.'],
+  ['จัดการกระแสเงินสด', 'Manage cash flow'],
+  ['เห็นเงินเข้า–ออกล่วงหน้า ไม่สะดุด', 'See money in and out ahead of time, without surprises.'],
+  ['วางแผนการเติบโต', 'Plan for growth'],
+  ['ตัดสินใจขยายสาขาหรือสินค้าใหม่จากข้อมูล', 'Decide on new branches or products with data.'],
+  ['เข้าใจลูกค้า', 'Understand customers'],
+  ['รู้ว่าอะไรขายดีและใครคือลูกค้าหลัก', 'Know what sells and who your main customers are.'],
+  ['ทุกอย่างพร้อมแล้ว', 'You’re all set'],
+  ['ตรวจสอบข้อมูลอีกครั้ง แล้วเริ่มใช้งาน ROOKAR ได้เลย', 'Review your details, then start using ROOKAR.'],
+  ['พนักงาน', 'Employees'],
+  ['รายได้ต่อปี', 'Annual revenue'],
+  ['ยังไม่ได้เลือก', 'Not selected'],
+  ['ยังไม่มีข้อมูลจริง?', 'No real data yet?'],
+  ['เริ่มด้วยไฟล์ยอดขายหรือต้นทุน 1 ไฟล์ก็พอ', 'Start with one sales or cost file.'],
+  ['ROOKAR จะค่อย ๆ เรียนรู้ธุรกิจคุณไปพร้อมกัน', 'ROOKAR will learn about your business along the way.'],
+  ['นำเข้าข้อมูลแล้ว ROOKAR จะใช้ข้อมูลนี้วิเคราะห์ภาพรวมและคำแนะนำให้คุณทันที', 'Data imported. ROOKAR will use it to analyze your overview and recommendations right away.'],
+  ['เริ่มใช้งาน ROOKAR', 'Start using ROOKAR'],
+  ['เปลี่ยนใจได้ทุกเมื่อ · ข้อมูลธุรกิจแก้ไขได้ภายหลัง', 'You can change your mind anytime · Business details can be edited later.'],
+  ['ขั้นตอนที่ ', 'Step '],
+  ['ข้อมูลเพิ่มเติม', 'More information'],
+  ['ขายสาธารณสุข (B2G)', 'Public healthcare (B2G) sales'],
+  ['ขายก่อนเลย', 'Early sales'],
+  ['ลากไฟล์มาวาง หรือ', 'Drag and drop a file, or'],
+
   ['ภาพรวมธุรกิจของ', 'Business overview of'],
   ['ภาพรวมธุรกิจ', 'Business overview'],
   ['อาหารและเครื่องดื่ม', 'Food & Beverage'],
@@ -796,7 +870,12 @@ function handleElement(element: Element) {
       stored = new Map()
       attrOriginals.set(element, stored)
     }
-    const original = stored.get(attr) ?? current
+    let original = stored.get(attr)
+    if (original === undefined) {
+      original = current
+    } else if (current !== original && current !== translateValue(original)) {
+      original = current
+    }
     stored.set(attr, original)
     const next = locale.value === 'en' ? translateValue(original) : original
     if (current !== next) element.setAttribute(attr, next)
@@ -849,6 +928,8 @@ export function startAutoI18n() {
         })
       } else if (mutation.type === 'characterData' && mutation.target.nodeType === Node.TEXT_NODE) {
         handleText(mutation.target as Text)
+      } else if (mutation.type === 'attributes' && mutation.target.nodeType === Node.ELEMENT_NODE) {
+        handleElement(mutation.target as Element)
       }
     }
   })

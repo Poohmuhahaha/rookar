@@ -23,7 +23,7 @@ const emit = defineEmits<{ back: [] }>()
         <button
           v-if="back"
           type="button"
-          class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-ink-soft transition-colors hover:bg-ink-100 lg:hidden"
+          class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-ink-soft transition-colors hover:bg-ink-100"
           aria-label="ย้อนกลับ"
           @click="emit('back')"
         >
