@@ -153,6 +153,14 @@ function back() {
   if (current.value > 0) current.value -= 1
 }
 
+function headerBack() {
+  if (current.value > 0) {
+    back()
+    return
+  }
+  router.history.back()
+}
+
 function skipImport() {
   if (current.value === 2) current.value = 3
 }
@@ -216,6 +224,8 @@ async function skip() {
   <PageHeader
     title="ตั้งค่าธุรกิจ"
     description="ข้อมูลนี้ช่วยให้ ROOKAR ตีความตัวเลขและให้คำแนะนำที่ตรงกับธุรกิจของคุณมากขึ้น"
+    back
+    @back="headerBack"
   >
     <template #actions>
       <a

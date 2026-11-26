@@ -64,7 +64,7 @@ const th = {
   'err.genericReset': 'ตั้งรหัสผ่านใหม่ไม่สำเร็จ กรุณาลองใหม่',
   'err.genericSend': 'ส่งลิงก์ไม่สำเร็จ กรุณาลองใหม่',
 
-  'login.title': 'Sign in',
+  'login.title': 'เข้าสู่ระบบ',
   'login.subtitle': 'เข้าสู่ระบบเพื่อดูภาพรวมธุรกิจและคุยกับ AI ของคุณ',
   'login.confirmLabel': 'ยืนยันรหัสผ่าน',
   'login.confirmPlaceholder': 'กรอกรหัสผ่านอีกครั้ง',
@@ -76,7 +76,7 @@ const th = {
   'toast.loginTitle': 'เข้าสู่ระบบสำเร็จ',
   'toast.welcome': 'ยินดีต้อนรับกลับ {name}',
 
-  'signup.title': 'Signup',
+  'signup.title': 'สมัครใช้งาน',
   'signup.subtitle': 'สมัครฟรีและตั้งค่าธุรกิจของคุณได้ในไม่ถึง 2 นาที',
   'signup.nameLabel': 'ชื่อ-นามสกุล',
   'signup.namePlaceholder': 'เช่น ภีม ธีรภัทร',

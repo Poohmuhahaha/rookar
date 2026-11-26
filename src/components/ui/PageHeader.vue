@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Link } from '@tanstack/vue-router'
-import { ChevronRight } from '@lucide/vue'
+import { ArrowLeft, ChevronRight } from '@lucide/vue'
 import InfoTip from './InfoTip.vue'
 import MobileNavButton from '@/components/layout/MobileNavButton.vue'
 
@@ -8,7 +8,10 @@ defineProps<{
   title: string
   description?: string
   breadcrumb?: { label: string; to: string }
+  back?: boolean
 }>()
+
+const emit = defineEmits<{ back: [] }>()
 </script>
 
 <template>
@@ -17,7 +20,16 @@ defineProps<{
   >
     <div class="min-w-0">
       <div class="flex items-center gap-1.5">
-        <MobileNavButton class="lg:hidden" />
+        <button
+          v-if="back"
+          type="button"
+          class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-ink-soft transition-colors hover:bg-ink-100 lg:hidden"
+          aria-label="ย้อนกลับ"
+          @click="emit('back')"
+        >
+          <ArrowLeft class="h-5 w-5" aria-hidden="true" />
+        </button>
+        <MobileNavButton v-else class="lg:hidden" />
         <slot name="leading" />
         <h1 class="flex flex-wrap items-center gap-x-2 gap-y-1 text-[24px] font-semibold tracking-[-0.02em] text-ink">
           <template v-if="breadcrumb">

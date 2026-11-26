@@ -20,6 +20,7 @@ import AppBadge from '@/components/ui/AppBadge.vue'
 import AppButton from '@/components/ui/AppButton.vue'
 import { getSession, logout, resetAccountData } from '@/lib/mockApi'
 import { profileAvatar, setProfileAvatar } from '@/lib/profile'
+import { locale, setLocale, t } from '@/lib/i18n'
 import { useToast } from '@/lib/toast'
 
 const router = useRouter()
@@ -41,7 +42,6 @@ const saved = (() => {
   try {
     return JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? '{}') as {
       theme?: 'light' | 'dark'
-      language?: 'th' | 'en'
       notifications?: Record<string, boolean>
     }
   } catch {
@@ -50,7 +50,6 @@ const saved = (() => {
 })()
 
 const theme = ref<'light' | 'dark'>(saved.theme ?? 'light')
-const language = ref<'th' | 'en'>(saved.language ?? 'th')
 const notifications = reactive({
   anomaly: saved.notifications?.anomaly ?? true,
   weeklySummary: saved.notifications?.weeklySummary ?? true,
@@ -59,13 +58,12 @@ const notifications = reactive({
 })
 
 watch(
-  [theme, language, notifications],
+  [theme, notifications],
   () => {
     localStorage.setItem(
       SETTINGS_KEY,
       JSON.stringify({
         theme: theme.value,
-        language: language.value,
         notifications,
       }),
     )
@@ -110,8 +108,9 @@ function toggleTheme() {
 }
 
 function toggleLanguage() {
-  language.value = language.value === 'th' ? 'en' : 'th'
-  toast.success('บันทึกการตั้งค่าภาษาแล้ว', language.value === 'th' ? 'ภาษาไทย' : 'English')
+  const next = locale.value === 'th' ? 'en' : 'th'
+  setLocale(next)
+  toast.success(t('lang.changedTitle'), t('lang.changedDesc'))
 }
 
 function toggleNotification(key: keyof typeof notifications) {
@@ -249,20 +248,20 @@ async function signOut() {
                 <Globe2 class="h-4 w-4 text-muted" aria-hidden="true" />
                 <div>
                   <p class="text-[12.5px] font-medium text-ink">ภาษา</p>
-                  <p class="text-[11px] text-muted">{{ language === 'th' ? 'ภาษาไทย' : 'English' }}</p>
+                  <p class="text-[11px] text-muted">{{ locale === 'th' ? 'ภาษาไทย' : 'English' }}</p>
                 </div>
               </div>
               <button
                 type="button"
                 role="switch"
-                :aria-checked="language === 'en'"
+                :aria-checked="locale === 'en'"
                 class="relative h-6 w-11 shrink-0 rounded-full transition-colors"
-                :class="language === 'en' ? 'bg-black' : 'bg-neutral-300'"
+                :class="locale === 'en' ? 'bg-black' : 'bg-neutral-300'"
                 @click="toggleLanguage"
               >
                 <span
                   class="absolute top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-[left]"
-                  :class="language === 'en' ? 'left-[22px]' : 'left-0.5'"
+                  :class="locale === 'en' ? 'left-[22px]' : 'left-0.5'"
                 />
               </button>
             </div>

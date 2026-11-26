@@ -16,6 +16,7 @@ import {
 import BrandLogo from '@/components/brand/BrandLogo.vue'
 import KpiCard from '@/components/charts/KpiCard.vue'
 import RevenueChart from '@/components/charts/RevenueChart.vue'
+import LanguageSwitcher from '@/components/ui/LanguageSwitcher.vue'
 import { getSession } from '@/lib/mockApi'
 import type { KpiPoint } from '@/types'
 
@@ -262,6 +263,12 @@ const previewSeries: KpiPoint[] = [
           </nav>
 
           <div class="flex items-center gap-1.5 sm:gap-3">
+            <div class="hidden sm:block">
+              <LanguageSwitcher />
+            </div>
+            <div class="sm:hidden">
+              <LanguageSwitcher icon-only />
+            </div>
             <template v-if="session">
               <Link
                 to="/app"
