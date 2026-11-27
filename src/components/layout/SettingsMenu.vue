@@ -29,7 +29,8 @@ import {
 import AppButton from '@/components/ui/AppButton.vue'
 import AppModal from '@/components/ui/AppModal.vue'
 import { getSession, logout } from '@/lib/mockApi'
-import { profileAvatar, setProfileAvatar } from '@/lib/profile'
+import { profileAvatar, uploadProfileAvatar } from '@/lib/profile'
+import { locale } from '@/lib/i18n'
 import { useToast } from '@/lib/toast'
 
 const props = withDefaults(defineProps<{ variant?: 'default' | 'assistant' }>(), {
@@ -52,21 +53,23 @@ function triggerAvatarPicker() {
   avatarInput.value?.click()
 }
 
-function handleAvatarUpload(event: Event) {
+async function handleAvatarUpload(event: Event) {
   const input = event.target as HTMLInputElement
   const file = input.files?.[0]
   if (!file) return
   if (!file.type.startsWith('image/')) {
     toast.error('ไฟล์ไม่ถูกต้อง', 'กรุณาเลือกไฟล์รูปภาพ (JPG, PNG, WebP)')
+    input.value = ''
     return
   }
-  const reader = new FileReader()
-  reader.onload = (e) => {
-    const dataUrl = e.target?.result as string
-    setProfileAvatar(dataUrl)
+  try {
+    await uploadProfileAvatar(file)
     toast.success('อัปเดตรูปโปรไฟล์สำเร็จ', 'บันทึกรูปโปรไฟล์ใหม่ของคุณเรียบร้อยแล้ว')
+  } catch (error) {
+    toast.error('อัปโหลดรูปไม่สำเร็จ', error instanceof Error ? error.message : 'กรุณาลองใหม่')
+  } finally {
+    input.value = ''
   }
-  reader.readAsDataURL(file)
 }
 
 // Modal types
@@ -164,7 +167,7 @@ async function signOut() {
   <input
     ref="avatarInput"
     type="file"
-    accept="image/*"
+    accept="image/jpeg,image/png,image/webp"
     class="sr-only"
     aria-label="อัปโหลดรูปโปรไฟล์"
     @change="handleAvatarUpload"
@@ -266,6 +269,13 @@ async function signOut() {
             <span class="text-[11px] font-medium text-brand-700">เปลี่ยนรูป</span>
             <ChevronRight class="h-3.5 w-3.5 text-faint" aria-hidden="true" />
           </button>
+          <p class="px-3 pb-2 text-[10.5px] leading-relaxed text-muted">
+            {{
+              locale === 'th'
+                ? 'JPG, PNG, WebP · สูงสุด 10 MB/ไฟล์ · รวม 250 MB หรือ 500 ไฟล์'
+                : 'JPG, PNG, WebP · max 10 MB/file · 250 MB or 500 files total'
+            }}
+          </p>
         </section>
 
         <!-- 3. ข้อมูลและความเป็นส่วนตัว -->

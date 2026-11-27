@@ -1,0 +1,8 @@
+ALTER TABLE media_files ADD COLUMN thumb_size_bytes INTEGER;
+
+CREATE TABLE IF NOT EXISTS media_usage (
+  user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  file_count INTEGER NOT NULL DEFAULT 0,
+  bytes_used INTEGER NOT NULL DEFAULT 0,
+  updated_at TEXT NOT NULL
+);

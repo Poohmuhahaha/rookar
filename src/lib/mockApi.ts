@@ -183,6 +183,8 @@ export type AiChatOptions = {
   history?: { role: 'user' | 'assistant'; content: string }[]
   attachment?: { name: string; content: string } | null
   conversationId?: string
+  mediaIds?: string[]
+  messageId?: string
   signal?: AbortSignal
 }
 
@@ -203,6 +205,8 @@ export async function* streamAiReply(
       history: options.history ?? [],
       attachment: options.attachment ?? null,
       conversationId: options.conversationId ?? undefined,
+      mediaIds: options.mediaIds ?? [],
+      messageId: options.messageId ?? undefined,
     }),
     signal: options.signal,
   })

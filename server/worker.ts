@@ -1,5 +1,8 @@
 import { app } from './app'
 import { createD1SqlClient, type D1DatabaseLike } from './db'
+import { setMediaStore } from './media'
+import { R2MediaStore, type R2BucketLike } from './media/r2'
+import { cleanupMedia } from './services/media'
 import { setRuntime, type RuntimeConfig } from './runtime'
 
 type AssetsBinding = {
@@ -9,6 +12,7 @@ type AssetsBinding = {
 export type WorkerEnv = {
   DB: D1DatabaseLike
   ASSETS: AssetsBinding
+  MEDIA?: R2BucketLike
   APP_URL?: string
   AI_PROVIDER?: string
   OPENAI_API_KEY?: string
@@ -50,6 +54,15 @@ export default {
 
     if (!env.DB) return Response.json({ error: 'Database binding is not configured' }, { status: 500 })
     setRuntime(createD1SqlClient(env.DB), runtimeConfig(env, url))
+    if (env.MEDIA) setMediaStore(new R2MediaStore(env.MEDIA))
     return app.fetch(request, env, ctx)
+  },
+
+  async scheduled(_controller: { scheduledTime: number; cron: string }, env: WorkerEnv): Promise<void> {
+    if (!env.DB) return
+    const url = new URL(env.APP_URL ?? 'https://rookar.local')
+    setRuntime(createD1SqlClient(env.DB), runtimeConfig(env, url))
+    if (env.MEDIA) setMediaStore(new R2MediaStore(env.MEDIA))
+    await cleanupMedia()
   },
 }

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from '@tanstack/vue-router'
 import {
   Bell,
@@ -9,7 +9,9 @@ import {
   LogOut,
   Mail,
   MessageSquare,
+  Pencil,
   ShieldCheck,
+  Sparkles,
   Sun,
   Trash2,
   Upload,
@@ -17,17 +19,24 @@ import {
 import PageHeader from '@/components/ui/PageHeader.vue'
 import AppBadge from '@/components/ui/AppBadge.vue'
 import AppButton from '@/components/ui/AppButton.vue'
+import AppModal from '@/components/ui/AppModal.vue'
+import TextField from '@/components/ui/TextField.vue'
+import SelectField from '@/components/ui/SelectField.vue'
 import { getSession, logout, resetAccountData } from '@/lib/mockApi'
-import { profileAvatar, setProfileAvatar } from '@/lib/profile'
+import { setSession } from '@/lib/session'
+import { apiFetch } from '@/lib/api/client'
+import { profileAvatar } from '@/lib/profile'
+import { uploadImage, type MediaDto } from '@/lib/media'
+import { getAiUsage, type AiUsage } from '@/lib/aiUsage'
 import { locale, setLocale, t } from '@/lib/i18n'
 import { useToast } from '@/lib/toast'
+import type { Session } from '@/types'
 
 const router = useRouter()
 const toast = useToast()
-const session = getSession()
 
-const user = computed(() => session?.user)
-const business = computed(() => session?.business)
+const user = computed(() => getSession()?.user)
+const business = computed(() => getSession()?.business)
 
 const roleLabel = computed(() => {
   if (user.value?.role === 'owner') return 'เจ้าของธุรกิจ'
@@ -35,6 +44,125 @@ const roleLabel = computed(() => {
   if (user.value?.role === 'staff') return 'พนักงาน'
   return 'ผู้ดูแลระบบ'
 })
+
+const profileModalOpen = ref(false)
+const profileSaving = ref(false)
+const profileError = ref('')
+const profileDraft = reactive({ name: '', email: '', role: 'owner' })
+const profileAvatarInput = ref<HTMLInputElement | null>(null)
+const profileFile = ref<File | null>(null)
+const profilePreviewUrl = ref('')
+const profilePreviewSrc = computed(() => profilePreviewUrl.value || profileAvatar.value)
+
+const roleOptions = computed(() => {
+  const options = [
+    { value: 'owner', label: 'เจ้าของธุรกิจ' },
+    { value: 'manager', label: 'ผู้จัดการ' },
+    { value: 'staff', label: 'พนักงาน' },
+  ]
+  if (user.value?.role === 'admin') {
+    options.push({ value: 'admin', label: 'ผู้ดูแลระบบ' })
+  }
+  return options
+})
+
+function resetProfileImage() {
+  if (profilePreviewUrl.value) URL.revokeObjectURL(profilePreviewUrl.value)
+  profilePreviewUrl.value = ''
+  profileFile.value = null
+  if (profileAvatarInput.value) profileAvatarInput.value.value = ''
+}
+
+function closeProfileModal(open: boolean) {
+  profileModalOpen.value = open
+  if (!open) {
+    profileError.value = ''
+    resetProfileImage()
+  }
+}
+
+function openProfileModal() {
+  profileDraft.name = user.value?.name ?? ''
+  profileDraft.email = user.value?.email ?? ''
+  profileDraft.role = user.value?.role ?? 'owner'
+  profileError.value = ''
+  resetProfileImage()
+  profileModalOpen.value = true
+}
+
+function handleProfileFile(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+  if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+    toast.error('ไฟล์ไม่ถูกต้อง', 'กรุณาเลือกไฟล์รูปภาพ (JPG, PNG, WebP)')
+    input.value = ''
+    return
+  }
+  if (profilePreviewUrl.value) URL.revokeObjectURL(profilePreviewUrl.value)
+  profileFile.value = file
+  profilePreviewUrl.value = URL.createObjectURL(file)
+  input.value = ''
+}
+
+onBeforeUnmount(() => {
+  if (profilePreviewUrl.value) URL.revokeObjectURL(profilePreviewUrl.value)
+})
+
+async function saveProfile() {
+  const name = profileDraft.name.trim()
+  const email = profileDraft.email.trim().toLowerCase()
+  if (name.length < 2) {
+    profileError.value = 'ชื่อต้องมีอย่างน้อย 2 ตัวอักษร'
+    return
+  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    profileError.value = 'รูปแบบอีเมลไม่ถูกต้อง'
+    return
+  }
+  profileSaving.value = true
+  profileError.value = ''
+  let media: MediaDto | null = null
+  try {
+    if (profileFile.value) {
+      media = await uploadImage(profileFile.value, {
+        kind: 'avatar',
+        maxEdge: 512,
+        quality: 0.85,
+        fileName: 'avatar.webp',
+      })
+    }
+    const data = await apiFetch<{ session: Session }>('/me', {
+      method: 'PATCH',
+      body: JSON.stringify({
+        name,
+        email,
+        role: profileDraft.role,
+        ...(media ? { avatarMediaId: media.id } : {}),
+      }),
+    })
+    setSession(data.session)
+    profileModalOpen.value = false
+    resetProfileImage()
+    toast.success('บันทึกข้อมูลส่วนตัวแล้ว')
+  } catch (error) {
+    if (media) {
+      let linked = true
+      try {
+        const current = await apiFetch<{ session: Session | null }>('/auth/session')
+        linked = current.session?.user.avatarUrl?.includes(media.id) ?? false
+      } catch {
+        linked = true
+      }
+      if (!linked) {
+        await apiFetch(`/media/${media.id}`, { method: 'DELETE' }).catch(() => undefined)
+      }
+    }
+    profileError.value = error instanceof Error ? error.message : 'บันทึกข้อมูลไม่สำเร็จ'
+  } finally {
+    profileSaving.value = false
+  }
+}
 
 const SETTINGS_KEY = 'rookar.settings.v1'
 const saved = (() => {
@@ -74,29 +202,56 @@ const notificationItems = [
   { key: 'productTips', label: 'เคล็ดลับการใช้งาน', description: 'ฟีเจอร์ใหม่และวิธีใช้ ROOKAR' },
 ] as const
 
-const avatarInput = ref<HTMLInputElement | null>(null)
+const aiUsage = ref<AiUsage | null>(null)
 
-function pickAvatar() {
-  avatarInput.value?.click()
+async function loadAiUsage() {
+  try {
+    aiUsage.value = await getAiUsage()
+  } catch {
+    aiUsage.value = null
+  }
 }
 
-function handleAvatar(event: Event) {
-  const input = event.target as HTMLInputElement
-  const file = input.files?.[0]
-  if (!file) return
-  if (!file.type.startsWith('image/')) {
-    toast.error('ไฟล์ไม่ถูกต้อง', 'กรุณาเลือกไฟล์รูปภาพ (JPG, PNG, WebP)')
-    return
-  }
-  const reader = new FileReader()
-  reader.onload = (e) => {
-    const dataUrl = e.target?.result as string
-    setProfileAvatar(dataUrl)
-    toast.success('อัปเดตรูปโปรไฟล์สำเร็จ')
-  }
-  reader.readAsDataURL(file)
-  input.value = ''
+function usagePercentOf(value: number | undefined, limit: number | undefined) {
+  if (!value || !limit || limit <= 0) return 0
+  return Math.min(100, (value / limit) * 100)
 }
+
+function usageBarClass(percent: number) {
+  if (percent >= 90) return 'bg-rose-600'
+  if (percent >= 70) return 'bg-amber-500'
+  return 'bg-black'
+}
+
+function formatTokenCount(value: number) {
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`
+  if (value >= 1_000) return `${(value / 1_000).toFixed(1)}k`
+  return String(value)
+}
+
+function aiDayPercent() {
+  if (!aiUsage.value) return 0
+  const { day, limits } = aiUsage.value
+  const tokens = day.inputTokens + day.outputTokens
+  return Math.max(
+    usagePercentOf(day.messages, limits.dailyMessages),
+    usagePercentOf(tokens, limits.dailyTotalTokens),
+  )
+}
+
+function aiMonthPercent() {
+  if (!aiUsage.value) return 0
+  const { month, limits } = aiUsage.value
+  const tokens = month.inputTokens + month.outputTokens
+  return Math.max(
+    usagePercentOf(month.messages, limits.monthlyMessages),
+    usagePercentOf(tokens, limits.monthlyTotalTokens),
+  )
+}
+
+onMounted(() => {
+  void loadAiUsage()
+})
 
 function toggleLanguage() {
   const next = locale.value === 'th' ? 'en' : 'th'
@@ -137,14 +292,14 @@ async function signOut() {
   />
 
   <div class="space-y-5">
+    <div class="grid gap-5 xl:grid-cols-2">
     <article class="card-fade-static p-6 sm:p-7">
-      <div class="relative z-10 flex flex-col gap-5 sm:flex-row sm:items-center">
-        <input ref="avatarInput" type="file" accept="image/*" class="sr-only" aria-label="อัปโหลดรูปโปรไฟล์" @change="handleAvatar" />
+      <div class="relative z-10 flex h-full flex-col gap-5 sm:flex-row sm:items-start">
         <button
           type="button"
           class="group relative flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-full bg-neutral-200"
-          aria-label="เปลี่ยนรูปโปรไฟล์"
-          @click="pickAvatar"
+          aria-label="แก้ไขรูปโปรไฟล์"
+          @click="openProfileModal"
         >
           <img :src="profileAvatar" :alt="user?.name ?? 'Profile'" class="h-full w-full object-cover" />
           <span class="absolute inset-0 flex items-center justify-center bg-black/45 opacity-0 transition group-hover:opacity-100">
@@ -153,23 +308,96 @@ async function signOut() {
         </button>
 
         <div class="min-w-0 flex-1">
-          <h2 class="text-xl font-bold tracking-tight text-ink">{{ user?.name ?? 'ผู้ใช้งาน' }}</h2>
+          <div class="flex min-w-0 items-center gap-2">
+            <h2 class="truncate text-[24px] font-bold tracking-tight text-ink">{{ user?.name ?? 'ผู้ใช้งาน' }}</h2>
+            <button
+              type="button"
+              class="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-muted transition-colors hover:bg-black/[0.06] hover:text-ink"
+              aria-label="แก้ไขข้อมูลส่วนตัว"
+              @click="openProfileModal"
+            >
+              <Pencil class="h-3.5 w-3.5" aria-hidden="true" />
+            </button>
+          </div>
           <p class="mt-0.5 text-[12.5px] text-muted">{{ user?.email }}</p>
           <div class="mt-2 flex flex-wrap items-center gap-1.5">
             <AppBadge tone="neutral">{{ roleLabel }}</AppBadge>
           </div>
         </div>
-
-        <button
-          type="button"
-          class="inline-flex h-9 shrink-0 items-center gap-1.5 self-start rounded-full bg-neutral-100 px-3.5 text-[11.5px] font-semibold text-ink transition hover:bg-neutral-200 sm:self-center"
-          @click="pickAvatar"
-        >
-          <Upload class="h-3.5 w-3.5" aria-hidden="true" />
-          เปลี่ยนรูป
-        </button>
       </div>
     </article>
+      <article class="card-fade-static p-6 sm:p-7">
+        <div class="relative z-10">
+          <div class="flex items-center gap-2">
+            <Sparkles class="h-4 w-4 text-muted" aria-hidden="true" />
+            <h2 class="text-base font-bold text-ink">
+              {{ locale === 'th' ? 'การใช้งาน AI' : 'AI usage' }}
+            </h2>
+          </div>
+
+          <template v-if="aiUsage">
+            <div class="mt-4 space-y-4">
+              <div>
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                  <p class="text-[12px] font-semibold text-ink">
+                    {{ locale === 'th' ? 'วันนี้' : 'Today' }}
+                  </p>
+                  <p class="text-[11px] text-muted">
+                    {{ aiUsage.day.messages }}/{{ aiUsage.limits.dailyMessages }}
+                    {{ locale === 'th' ? 'ข้อความ' : 'messages' }} ·
+                    {{ formatTokenCount(aiUsage.day.inputTokens + aiUsage.day.outputTokens) }}/{{ formatTokenCount(aiUsage.limits.dailyTotalTokens) }} tokens
+                  </p>
+                </div>
+                <div class="mt-1.5 h-1.5 overflow-hidden rounded-full bg-black/10">
+                  <div
+                    class="h-full rounded-full transition-[width]"
+                    :class="usageBarClass(aiDayPercent())"
+                    :style="{ width: `${aiDayPercent()}%` }"
+                  />
+                </div>
+                <p class="mt-1.5 text-[10.5px] text-muted">
+                  input {{ formatTokenCount(aiUsage.day.inputTokens) }} · output {{ formatTokenCount(aiUsage.day.outputTokens) }}
+                </p>
+              </div>
+
+              <div>
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                  <p class="text-[12px] font-semibold text-ink">
+                    {{ locale === 'th' ? 'เดือนนี้' : 'This month' }}
+                  </p>
+                  <p class="text-[11px] text-muted">
+                    {{ aiUsage.month.messages }}/{{ aiUsage.limits.monthlyMessages }}
+                    {{ locale === 'th' ? 'ข้อความ' : 'messages' }} ·
+                    {{ formatTokenCount(aiUsage.month.inputTokens + aiUsage.month.outputTokens) }}/{{ formatTokenCount(aiUsage.limits.monthlyTotalTokens) }} tokens
+                  </p>
+                </div>
+                <div class="mt-1.5 h-1.5 overflow-hidden rounded-full bg-black/10">
+                  <div
+                    class="h-full rounded-full transition-[width]"
+                    :class="usageBarClass(aiMonthPercent())"
+                    :style="{ width: `${aiMonthPercent()}%` }"
+                  />
+                </div>
+                <p class="mt-1.5 text-[10.5px] text-muted">
+                  input {{ formatTokenCount(aiUsage.month.inputTokens) }} · output {{ formatTokenCount(aiUsage.month.outputTokens) }}
+                </p>
+              </div>
+            </div>
+            <p class="mt-3 text-[10.5px] leading-relaxed text-muted">
+              {{
+                locale === 'th'
+                  ? 'นับ token โดยประมาณ · รีเซ็ตรายวัน/รายเดือนตามเวลาไทย'
+                  : 'Token counts are approximate · daily and monthly limits reset in Thailand time'
+              }}
+            </p>
+          </template>
+          <p v-else class="mt-4 text-[11.5px] text-muted">
+            {{ locale === 'th' ? 'ยังไม่มีข้อมูลการใช้งาน' : 'No usage data yet' }}
+          </p>
+        </div>
+      </article>
+    </div>
+
 
     <div class="grid gap-5 xl:grid-cols-2">
       <article class="card-fade-static p-6 sm:p-7">
@@ -204,6 +432,7 @@ async function signOut() {
           </AppButton>
         </div>
       </article>
+
 
       <article class="card-fade-static p-6 sm:p-7 lg:hidden">
         <div class="relative z-10">
@@ -340,5 +569,58 @@ async function signOut() {
         </button>
       </div>
     </article>
+
+    <AppModal
+      :open="profileModalOpen"
+      title="แก้ไขข้อมูลส่วนตัว"
+      description="แก้ไขรูป ชื่อ อีเมล และบทบาทของคุณ — อีเมลใช้สำหรับเข้าสู่ระบบ"
+      @update:open="closeProfileModal"
+    >
+      <div class="space-y-4">
+        <input
+          ref="profileAvatarInput"
+          type="file"
+          accept="image/jpeg,image/png,image/webp"
+          class="sr-only"
+          aria-label="เลือกไฟล์รูปโปรไฟล์"
+          @change="handleProfileFile"
+        />
+        <div class="flex items-center gap-4">
+          <div class="h-20 w-20 shrink-0 overflow-hidden rounded-full bg-neutral-200">
+            <img :src="profilePreviewSrc" :alt="user?.name ?? 'Profile'" class="h-full w-full object-cover" />
+          </div>
+          <div class="min-w-0">
+            <button
+              type="button"
+              class="inline-flex h-9 items-center gap-1.5 rounded-full bg-neutral-100 px-3.5 text-[11.5px] font-semibold text-ink transition hover:bg-neutral-200"
+              @click="profileAvatarInput?.click()"
+            >
+              <Upload class="h-3.5 w-3.5" aria-hidden="true" />
+              เปลี่ยนรูป
+            </button>
+            <p class="mt-1.5 text-[10.5px] leading-relaxed text-muted">
+              {{ locale === 'th' ? 'JPG, PNG, WebP · ≤ 10 MB' : 'JPG, PNG, WebP · max 10 MB' }}
+            </p>
+            <button
+              v-if="profileFile"
+              type="button"
+              class="mt-1 text-[10.5px] font-medium text-brand-700 underline-offset-4 hover:underline"
+              @click="resetProfileImage"
+            >
+              {{ locale === 'th' ? 'ใช้รูปเดิม' : 'Use current photo' }}
+            </button>
+          </div>
+        </div>
+
+        <TextField v-model="profileDraft.name" label="ชื่อ-นามสกุล" required />
+        <TextField v-model="profileDraft.email" type="email" label="อีเมล" required hint="ใช้สำหรับเข้าสู่ระบบ" />
+        <SelectField v-model="profileDraft.role" label="บทบาท" :options="roleOptions" />
+        <p v-if="profileError" class="text-[12px] text-danger">{{ profileError }}</p>
+      </div>
+      <template #footer>
+        <AppButton variant="secondary" @click="closeProfileModal(false)">ยกเลิก</AppButton>
+        <AppButton :loading="profileSaving" @click="saveProfile">บันทึก</AppButton>
+      </template>
+    </AppModal>
   </div>
 </template>

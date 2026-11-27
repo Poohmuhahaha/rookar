@@ -33,6 +33,7 @@ const emit = defineEmits<{
 const isAssistant = computed(() => props.message.role === 'assistant')
 const hasContent = computed(() => props.message.content.trim().length > 0)
 const citations = computed(() => props.message.citations ?? [])
+const mediaIds = computed(() => props.message.mediaIds ?? [])
 const showActionPlan = ref(false)
 const checklist = ref<{ id: string; text: string; done: boolean }[]>([])
 const editing = ref(false)
@@ -52,6 +53,11 @@ const attribution = computed(() => {
   if (role !== 'ภาพรวม (All)') return role
   return props.message.agentNames?.filter(Boolean)[0] ?? role
 })
+
+function mediaSrc(id: string, variant: 'thumb' | 'orig' = 'thumb') {
+  const query = variant === 'thumb' ? '?variant=thumb' : ''
+  return `/api/media/${encodeURIComponent(id)}${query}`
+}
 
 function startEdit() {
   draft.value = props.message.content
@@ -135,6 +141,27 @@ function toggleFeedback(value: 'up' | 'down') {
               · {{ tool.summary }}
             </span>
           </span>
+        </div>
+
+        <div
+          v-if="!isAssistant && mediaIds.length"
+          :class="cn('mb-2 grid gap-1.5', mediaIds.length === 1 ? 'grid-cols-1' : 'grid-cols-2')"
+        >
+          <a
+            v-for="(id, index) in mediaIds"
+            :key="id"
+            :href="mediaSrc(id, 'orig')"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="block overflow-hidden rounded-xl bg-black/5"
+          >
+            <img
+              :src="mediaSrc(id)"
+              :alt="`รูปแนบ ${index + 1}`"
+              :class="mediaIds.length === 1 ? 'max-h-64 w-full object-contain' : 'aspect-square h-full w-full object-cover'"
+              loading="lazy"
+            />
+          </a>
         </div>
 
         <template v-if="!isAssistant && editing">

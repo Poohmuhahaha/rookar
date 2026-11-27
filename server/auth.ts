@@ -226,7 +226,9 @@ export async function toSession(user: DbUser): Promise<Session> {
       email: user.email,
       role: user.role,
       initials: initialsFromName(user.name),
-      avatarUrl: user.avatar_url ?? '/avatar.jpg',
+      avatarUrl: user.avatar_media_id
+        ? `/api/media/${user.avatar_media_id}`
+        : user.avatar_url ?? '/avatar.jpg',
     },
     business: await getBusiness(user.id),
     onboardingComplete: Boolean(user.onboarding_complete),

@@ -4,6 +4,7 @@ process.env.DATABASE_URL = ':memory:'
 process.env.NODE_ENV = 'test'
 process.env.AI_PROVIDER = 'mock'
 process.env.OPENAI_API_KEY = ''
+process.env.MEDIA_DIR = `/tmp/rookar-media-test-${process.pid}`
 
 const { initBunRuntime } = await import('./bunDb')
 initBunRuntime({ databaseUrl: ':memory:', nodeEnv: 'test', aiProvider: 'mock', openaiApiKey: '', allowDevReset: true })
@@ -89,6 +90,128 @@ describe('ROOKAR API', () => {
     const dashboardResponse = await app.request('/api/dashboard?range=6m&industry=fnb', { headers: { Cookie: cookie } })
     const dashboard = await dashboardResponse.json() as { dashboard: unknown }
     expect(dashboard.dashboard).toBeNull()
+  })
+
+  it('uploads an avatar to the media store and sets it on the session', async () => {
+    const pngBase64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Z2Z8AAAAASUVORK5CYII='
+    const png = Uint8Array.from(atob(pngBase64), (char) => char.charCodeAt(0))
+    const form = new FormData()
+    form.set('file', new File([png], 'avatar.png', { type: 'image/png' }))
+    form.set('kind', 'avatar')
+
+    const upload = await app.request('/api/media', {
+      method: 'POST',
+      headers: { Cookie: cookie, Origin: 'http://localhost:5173' },
+      body: form,
+    })
+    expect(upload.status).toBe(201)
+    const uploaded = await upload.json() as { media: { id: string; url: string } }
+    expect(uploaded.media.url).toBe(`/api/media/${uploaded.media.id}`)
+
+    const update = await jsonRequest('/api/me', { avatarMediaId: uploaded.media.id }, 'PATCH')
+    expect(update.status).toBe(200)
+    const session = await update.json() as { session: { user: { avatarUrl: string } } }
+    expect(session.session.user.avatarUrl).toBe(`/api/media/${uploaded.media.id}`)
+
+    const served = await app.request(`/api/media/${uploaded.media.id}`, {
+      headers: { Cookie: cookie },
+    })
+    expect(served.status).toBe(200)
+    expect(served.headers.get('content-type')).toBe('image/png')
+    expect(served.headers.get('cache-control')).toContain('private')
+  })
+
+  it('returns media usage and limits', async () => {
+    const usageResponse = await app.request('/api/media/usage', {
+      headers: { Cookie: cookie },
+    })
+    expect(usageResponse.status).toBe(200)
+    const usage = await usageResponse.json() as {
+      usage: { fileCount: number; bytesUsed: number; maxBytes: number; maxFiles: number; maxFileBytes: number }
+    }
+    expect(usage.usage.fileCount).toBeGreaterThanOrEqual(1)
+    expect(usage.usage.bytesUsed).toBeGreaterThan(0)
+    expect(usage.usage.maxBytes).toBe(250 * 1024 * 1024)
+    expect(usage.usage.maxFiles).toBe(500)
+    expect(usage.usage.maxFileBytes).toBe(10 * 1024 * 1024)
+  })
+
+  it('serves a thumbnail variant when one is uploaded', async () => {    const pngBase64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Z2Z8AAAAASUVORK5CYII='
+    const png = Uint8Array.from(atob(pngBase64), (char) => char.charCodeAt(0))
+    const form = new FormData()
+    form.set('file', new File([png], 'photo.png', { type: 'image/png' }))
+    form.set('thumb', new File([png], 'thumb.png', { type: 'image/png' }))
+    form.set('kind', 'chat_image')
+
+    const upload = await app.request('/api/media', {
+      method: 'POST',
+      headers: { Cookie: cookie, Origin: 'http://localhost:5173' },
+      body: form,
+    })
+    expect(upload.status).toBe(201)
+    const uploaded = await upload.json() as { media: { id: string; thumbUrl: string } }
+
+    const thumb = await app.request(`/api/media/${uploaded.media.id}?variant=thumb`, {
+      headers: { Cookie: cookie },
+    })
+    expect(thumb.status).toBe(200)
+    expect(thumb.headers.get('content-type')).toBe('image/png')
+  })
+
+  it('cleans up unlinked media older than the grace period', async () => {
+    const pngBase64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Z2Z8AAAAASUVORK5CYII='
+    const png = Uint8Array.from(atob(pngBase64), (char) => char.charCodeAt(0))
+    const form = new FormData()
+    form.set('file', new File([png], 'orphan.png', { type: 'image/png' }))
+    form.set('kind', 'chat_image')
+
+    const upload = await app.request('/api/media', {
+      method: 'POST',
+      headers: { Cookie: cookie, Origin: 'http://localhost:5173' },
+      body: form,
+    })
+    expect(upload.status).toBe(201)
+    const uploaded = await upload.json() as { media: { id: string } }
+
+    await new Promise((resolve) => setTimeout(resolve, 25))
+    const { cleanupMedia } = await import('./services/media')
+    const removed = await cleanupMedia({ olderThanMs: 0 })
+    expect(removed).toBeGreaterThan(0)
+
+    const served = await app.request(`/api/media/${uploaded.media.id}`, {
+      headers: { Cookie: cookie },
+    })
+    expect(served.status).toBe(404)
+  })
+
+  it('removes linked chat images after the 30-day retention window', async () => {
+    const pngBase64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Z2Z8AAAAASUVORK5CYII='
+    const png = Uint8Array.from(atob(pngBase64), (char) => char.charCodeAt(0))
+    const form = new FormData()
+    form.set('file', new File([png], 'old-chat.png', { type: 'image/png' }))
+    form.set('kind', 'chat_image')
+
+    const upload = await app.request('/api/media', {
+      method: 'POST',
+      headers: { Cookie: cookie, Origin: 'http://localhost:5173' },
+      body: form,
+    })
+    expect(upload.status).toBe(201)
+    const uploaded = await upload.json() as { media: { id: string } }
+
+    const { db } = await import('./db')
+    await db.query(
+      'INSERT INTO media_links (media_id, user_id, owner_type, owner_id, created_at) VALUES (?, ?, ?, ?, ?)',
+    ).run(uploaded.media.id, userId, 'message', 'msg_retention_test', new Date().toISOString())
+
+    await new Promise((resolve) => setTimeout(resolve, 25))
+    const { cleanupMedia } = await import('./services/media')
+    await cleanupMedia({ olderThanMs: 24 * 60 * 60 * 1000, chatRetentionMs: 0 })
+
+    const served = await app.request(`/api/media/${uploaded.media.id}`, {
+      headers: { Cookie: cookie },
+    })
+    expect(served.status).toBe(404)
   })
 
   it('imports real CSV data scoped by industry', async () => {
@@ -230,6 +353,65 @@ describe('ROOKAR API', () => {
     expect(text).toContain('"type":"done"')
   })
 
+  it('accepts chat images, links them to the message, and validates ownership', async () => {
+    const pngBase64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Z2Z8AAAAASUVORK5CYII='
+    const png = Uint8Array.from(atob(pngBase64), (char) => char.charCodeAt(0))
+    const form = new FormData()
+    form.set('file', new File([png], 'chat.png', { type: 'image/png' }))
+    form.set('kind', 'chat_image')
+    const upload = await app.request('/api/media', {
+      method: 'POST',
+      headers: { Cookie: cookie, Origin: 'http://localhost:5173' },
+      body: form,
+    })
+    expect(upload.status).toBe(201)
+    const uploaded = await upload.json() as { media: { id: string } }
+
+    const response = await jsonRequest('/api/chat/stream', {
+      industry: 'fnb',
+      mediaIds: [uploaded.media.id],
+      messageId: 'msg_chat_image_test',
+    })
+    expect(response.status).toBe(200)
+    const text = await response.text()
+    expect(text).toContain('"type":"token"')
+    expect(text).toContain('"type":"done"')
+
+    const { db } = await import('./db')
+    const link = await db.query<{ count: number }>(
+      `SELECT COUNT(*) AS count FROM media_links
+       WHERE media_id = ? AND user_id = ? AND owner_type = 'message' AND owner_id = ?`,
+    ).get(uploaded.media.id, userId, 'msg_chat_image_test')
+    expect(link?.count).toBe(1)
+
+    const signup = await app.request('/api/auth/signup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Origin: 'http://localhost:5173' },
+      body: JSON.stringify({
+        name: 'Other User',
+        username: `other${Date.now()}`.slice(0, 30),
+        email: `other-${Date.now()}@rookar.local`,
+        password: 'testpassword123',
+      }),
+    })
+    const otherCookie = (signup.headers.get('set-cookie') ?? '').split(';')[0] ?? ''
+    const blocked = await app.request('/api/chat/stream', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Origin: 'http://localhost:5173',
+        Cookie: otherCookie,
+      },
+      body: JSON.stringify({
+        question: 'รูปนี้คืออะไร',
+        industry: 'fnb',
+        mediaIds: [uploaded.media.id],
+        messageId: 'msg_other_user',
+      }),
+    })
+    expect(blocked.status).toBe(400)
+  })
+
   it('blocks cross-origin auth requests and non-JSON bodies', async () => {
     const crossOrigin = await app.request('/api/auth/login', {
       method: 'POST',
@@ -244,6 +426,80 @@ describe('ROOKAR API', () => {
       body: JSON.stringify({ email: TEST_EMAIL, password: TEST_PASSWORD }),
     })
     expect(plainText.status).toBe(415)
+  })
+
+  it('tracks AI message and token usage against plan limits', async () => {
+    const response = await app.request('/api/ai/usage', { headers: { Cookie: cookie } })
+    expect(response.status).toBe(200)
+    const data = await response.json() as {
+      usage: {
+        plan: string
+        day: { messages: number; inputTokens: number; outputTokens: number }
+        limits: { dailyMessages: number; dailyTotalTokens: number; monthlyTotalTokens: number }
+      }
+    }
+    expect(data.usage.plan).toBe('Free')
+    expect(data.usage.day.messages).toBeGreaterThan(0)
+    expect(data.usage.day.inputTokens).toBeGreaterThan(0)
+    expect(data.usage.day.outputTokens).toBeGreaterThan(0)
+    expect(data.usage.limits.dailyMessages).toBe(30)
+    expect(data.usage.limits.dailyTotalTokens).toBe(1_000_000)
+    expect(data.usage.limits.monthlyTotalTokens).toBe(10_000_000)
+
+    const { db } = await import('./db')
+    await db.query('UPDATE ai_usage SET message_count = 30 WHERE user_id = ?').run(userId)
+    const blocked = await jsonRequest('/api/chat/stream', { question: 'ทดสอบโควตา' })
+    expect(blocked.status).toBe(429)
+    const blockedData = await blocked.json() as { code?: string }
+    expect(blockedData.code).toBe('AI_QUOTA_EXCEEDED')
+  })
+
+  it('updates profile name, email, and role', async () => {
+    const suffix = Date.now()
+    const email = `profile-${suffix}@rookar.local`
+    const newEmail = `profile-new-${suffix}@rookar.local`
+    const password = 'testpassword123'
+    const signup = await app.request('/api/auth/signup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Origin: 'http://localhost:5173' },
+      body: JSON.stringify({ name: 'Profile User', username: `profile${suffix}`.slice(0, 30), email, password }),
+    })
+    expect(signup.status).toBe(200)
+    const profileCookie = (signup.headers.get('set-cookie') ?? '').split(';')[0] ?? ''
+
+    const update = await app.request('/api/me', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Origin: 'http://localhost:5173', Cookie: profileCookie },
+      body: JSON.stringify({ name: 'Updated Name', email: newEmail, role: 'manager' }),
+    })
+    expect(update.status).toBe(200)
+    const session = await update.json() as {
+      session: { user: { name: string; email: string; role: string } }
+    }
+    expect(session.session.user.name).toBe('Updated Name')
+    expect(session.session.user.email).toBe(newEmail)
+    expect(session.session.user.role).toBe('manager')
+
+    const duplicate = await app.request('/api/me', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Origin: 'http://localhost:5173', Cookie: profileCookie },
+      body: JSON.stringify({ email: TEST_EMAIL }),
+    })
+    expect(duplicate.status).toBe(409)
+
+    const invalidRole = await app.request('/api/me', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Origin: 'http://localhost:5173', Cookie: profileCookie },
+      body: JSON.stringify({ role: 'admin' }),
+    })
+    expect(invalidRole.status).toBe(400)
+
+    const login = await app.request('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Origin: 'http://localhost:5173' },
+      body: JSON.stringify({ email: newEmail, password }),
+    })
+    expect(login.status).toBe(200)
   })
 
   it('rejects prototype-chain industry values and parses quoted CSV rows', () => {

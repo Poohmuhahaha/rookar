@@ -2,6 +2,8 @@ import { Database } from 'bun:sqlite'
 import { mkdirSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { SCHEMA_SQL } from './db'
+import { setMediaStore } from './media'
+import { FsMediaStore } from './media/fs'
 import { setRuntime, type RuntimeConfig, type SqlClient, type SqlStatement } from './runtime'
 
 function configureDatabase(sqlite: Database) {
@@ -12,7 +14,15 @@ function configureDatabase(sqlite: Database) {
   if (!userColumns.some((column) => column.name === 'username')) {
     sqlite.exec('ALTER TABLE users ADD COLUMN username TEXT;')
   }
+  if (!userColumns.some((column) => column.name === 'avatar_media_id')) {
+    sqlite.exec('ALTER TABLE users ADD COLUMN avatar_media_id TEXT;')
+  }
   sqlite.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username ON users(username);')
+
+  const mediaColumns = sqlite.query('PRAGMA table_info(media_files)').all() as { name: string }[]
+  if (!mediaColumns.some((column) => column.name === 'thumb_size_bytes')) {
+    sqlite.exec('ALTER TABLE media_files ADD COLUMN thumb_size_bytes INTEGER;')
+  }
 
   const sourceColumns = sqlite.query('PRAGMA table_info(data_sources)').all() as { name: string }[]
   if (!sourceColumns.some((column) => column.name === 'industry_confidence')) {
@@ -103,6 +113,7 @@ function processConfig(overrides: Partial<RuntimeConfig> = {}): RuntimeConfig {
 export function initBunRuntime(overrides: Partial<RuntimeConfig> = {}) {
   const config = processConfig(overrides)
   setRuntime(createBunSqlClient(config.databaseUrl), config)
+  setMediaStore(new FsMediaStore(process.env.MEDIA_DIR ?? './.data/media'))
   return config
 }
 
