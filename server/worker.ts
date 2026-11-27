@@ -2,6 +2,7 @@ import { app } from './app'
 import { createD1SqlClient, type D1DatabaseLike } from './db'
 import { setMediaStore } from './media'
 import { R2MediaStore, type R2BucketLike } from './media/r2'
+import { cleanupMedia } from './services/media'
 import { setRuntime, type RuntimeConfig } from './runtime'
 
 type AssetsBinding = {
@@ -55,5 +56,13 @@ export default {
     setRuntime(createD1SqlClient(env.DB), runtimeConfig(env, url))
     if (env.MEDIA) setMediaStore(new R2MediaStore(env.MEDIA))
     return app.fetch(request, env, ctx)
+  },
+
+  async scheduled(_controller: { scheduledTime: number; cron: string }, env: WorkerEnv): Promise<void> {
+    if (!env.DB) return
+    const url = new URL(env.APP_URL ?? 'https://rookar.local')
+    setRuntime(createD1SqlClient(env.DB), runtimeConfig(env, url))
+    if (env.MEDIA) setMediaStore(new R2MediaStore(env.MEDIA))
+    await cleanupMedia()
   },
 }

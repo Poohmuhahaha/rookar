@@ -6,7 +6,9 @@ import { env } from '../env'
 import { getDashboard } from './dashboard'
 import { industryWithData, listSources, profileForUser } from './sources'
 import { getMacroBenchmark } from './macro'
+import { estimateTokens, getAiLimits } from './aiUsage'
 import { runToolCallingAgent } from './toolCalling'
+import type { ChatImage } from './media'
 
 type Answer = { content: string; citations: Citation[] }
 
@@ -21,7 +23,9 @@ export type ChatContext = {
   agentIds?: string[]
   history?: ChatHistoryEntry[]
   attachment?: ChatAttachment | null
+  images?: ChatImage[]
   conversationId?: string
+  plan?: string | null
   signal?: AbortSignal
 }
 
@@ -311,6 +315,13 @@ async function buildSystemPrompt(userId: string, context: ChatContext): Promise<
     )
   }
 
+  if (context.images?.length) {
+    sections.push(
+      `=== รูปภาพแนบ ===\nผู้ใช้แนบรูป ${context.images.length} รูปมาพร้อมคำถาม ให้วิเคราะห์จากรูปโดยตรง ` +
+      'ถ้าข้อมูลในรูปไม่ชัดหรืออ่านไม่ได้ ให้บอกตามตรง ห้ามเดาตัวเลขจากรูป',
+    )
+  }
+
   return sections.join('\n\n')
 }
 
@@ -541,6 +552,9 @@ export async function* streamAnswer(userId: string, context: ChatContext): Async
     if (context.attachment) {
       prefix.push(summarizeAttachment(context.attachment))
     }
+    if (context.images?.length) {
+      prefix.push(`แนบรูป ${context.images.length} รูป (โหมดตัวอย่างยังไม่วิเคราะห์ภาพ)`)
+    }
     const content = prefix.length > 0 ? `${prefix.join('\n\n')}\n\n${answer.content}` : answer.content
     const chunks = content.match(/.{1,6}/gs) ?? [content]
     for (const chunk of chunks) {
@@ -549,6 +563,18 @@ export async function* streamAnswer(userId: string, context: ChatContext): Async
       if (context.signal?.aborted) return
       yield { type: 'token', value: chunk }
     }
+    yield {
+      type: 'usage',
+      usage: {
+        inputTokens: estimateTokens(JSON.stringify({
+          question: context.question,
+          history: context.history ?? [],
+          attachment: context.attachment ?? null,
+          images: context.images?.length ?? 0,
+        })) + (context.images?.length ?? 0) * 1000,
+        outputTokens: estimateTokens(content),
+      },
+    }
     for (const citation of answer.citations) {
       yield { type: 'citation', citation }
     }
@@ -556,6 +582,7 @@ export async function* streamAnswer(userId: string, context: ChatContext): Async
     return
   }
 
+  const limits = getAiLimits(context.plan)
   const systemPrompt = await buildSystemPrompt(userId, resolvedContext)
   const history = (context.history ?? [])
     .filter((entry) => entry.content.trim())
@@ -578,6 +605,8 @@ export async function* streamAnswer(userId: string, context: ChatContext): Async
     context: { userId, industry: resolvedIndustry },
     sessionId,
     signal: context.signal,
+    maxOutputTokens: limits.maxOutputTokens,
+    images: context.images,
   })) {
     yield event
   }

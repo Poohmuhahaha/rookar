@@ -1,5 +1,7 @@
 import { Hono } from 'hono'
 import { streamAnswer, type ChatContext } from '../services/ai'
+import { checkAiQuota, recordAiUsage } from '../services/aiUsage'
+import { linkMessageMedia, loadChatImages, MediaError, type ChatImage } from '../services/media'
 import { profileForUser } from '../services/sources'
 import { clientIp, enforceRateLimit } from '../security'
 import type { AppEnv } from '../types'
@@ -18,6 +20,8 @@ type ChatBody = {
   history?: { role?: string; content?: string }[]
   attachment?: { name?: string; content?: string } | null
   conversationId?: string
+  mediaIds?: string[]
+  messageId?: string
 }
 
 chatRoutes.post('/stream', async (c) => {
@@ -32,7 +36,17 @@ chatRoutes.post('/stream', async (c) => {
   const perDay = await enforceRateLimit(c, `chat:day:${user.id}`, 200, 24 * 60 * 60 * 1000)
   if (perDay) return perDay
   const body = await c.req.json().catch(() => null) as ChatBody | null
-  const question = body?.question?.trim() ?? ''
+  const rawMediaIds = Array.isArray(body?.mediaIds)
+    ? body.mediaIds.filter((id): id is string => typeof id === 'string' && id.length > 0 && id.length <= 100)
+    : []
+  const mediaIds = [...new Set(rawMediaIds)].slice(0, 4)
+  if (rawMediaIds.length > 4) return c.json({ error: 'แนบรูปได้สูงสุด 4 รูปต่อข้อความ' }, 400)
+  const rawMessageId = typeof body?.messageId === 'string' ? body.messageId.trim() : ''
+  const messageId = /^[A-Za-z0-9_-]{1,100}$/.test(rawMessageId) ? rawMessageId : ''
+  if (mediaIds.length > 0 && !messageId) {
+    return c.json({ error: 'ไม่พบรหัสข้อความสำหรับรูปแนบ' }, 400)
+  }
+  const question = body?.question?.trim() || (mediaIds.length > 0 ? 'ช่วยวิเคราะห์รูปที่แนบให้หน่อย' : '')
   if (!question) return c.json({ error: 'กรุณาพิมพ์คำถาม' }, 400)
   if (question.length > 4000) return c.json({ error: 'คำถามยาวเกินไป (สูงสุด 4,000 ตัวอักษร)' }, 413)
   let industry = body?.industry
@@ -63,6 +77,41 @@ chatRoutes.post('/stream', async (c) => {
   const rawConversationId = typeof body?.conversationId === 'string' ? body.conversationId.trim() : ''
   const conversationId = /^[A-Za-z0-9_-]{1,100}$/.test(rawConversationId) ? rawConversationId : ''
 
+  if (mediaIds.length > 0) {
+    try {
+      await linkMessageMedia(user.id, messageId, mediaIds)
+    } catch (error) {
+      if (error instanceof MediaError) {
+        return c.json({ error: error.message }, error.status as 400 | 413 | 404)
+      }
+      throw error
+    }
+  }
+
+  const quota = await checkAiQuota(
+    user.id,
+    user.plan,
+    body?.language === 'en' ? 'en' : 'th',
+  )
+  if (!quota.allowed) {
+    return c.json(
+      { error: quota.message ?? 'โควตา AI เต็มแล้ว', code: 'AI_QUOTA_EXCEEDED', usage: quota.usage },
+      429,
+    )
+  }
+
+  let images: ChatImage[] = []
+  if (mediaIds.length > 0) {
+    try {
+      images = await loadChatImages(user.id, mediaIds)
+    } catch (error) {
+      if (error instanceof MediaError) {
+        return c.json({ error: error.message }, error.status as 400 | 413 | 404)
+      }
+      throw error
+    }
+  }
+
   const context: ChatContext = {
     question,
     industry,
@@ -71,7 +120,9 @@ chatRoutes.post('/stream', async (c) => {
     agentIds,
     history,
     attachment,
+    images,
     conversationId: conversationId || undefined,
+    plan: user.plan,
     signal: c.req.raw.signal,
   }
 
@@ -79,6 +130,7 @@ chatRoutes.post('/stream', async (c) => {
   const stream = new ReadableStream({
     async start(controller) {
       let closed = false
+      let usage: { inputTokens: number; outputTokens: number } | null = null
       const send = (event: unknown) => {
         if (closed || c.req.raw.signal.aborted) return
         try {
@@ -88,12 +140,23 @@ chatRoutes.post('/stream', async (c) => {
         }
       }
       try {
-        for await (const event of streamAnswer(user.id, context)) send(event)
+        for await (const event of streamAnswer(user.id, context)) {
+          if (event.type === 'usage' && event.usage) {
+            usage = event.usage
+            continue
+          }
+          send(event)
+        }
       } catch (error) {
         if (error instanceof Error && error.name === 'AbortError') return
         console.error('[chat] stream failed', error)
         send({ type: 'error', message: 'AI ตอบไม่สำเร็จ กรุณาลองใหม่' })
       } finally {
+        if (usage) {
+          await recordAiUsage(user.id, usage.inputTokens, usage.outputTokens).catch((error) => {
+            console.error('[chat] failed to record AI usage', error)
+          })
+        }
         if (!closed) {
           try {
             controller.close()

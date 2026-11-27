@@ -217,6 +217,7 @@ export interface ChatMessage {
   answeredBy?: string
   toolEvents?: AiToolEvent[]
   actionPlan?: { id: string; text: string; done: boolean }[]
+  mediaIds?: string[]
 }
 
 export type SpecialistType = 'general' | 'finance' | 'market' | 'strategy' | 'planning'
@@ -243,11 +244,12 @@ export interface AiToolEvent {
 }
 
 export interface AiStreamEvent {
-  type: 'token' | 'citation' | 'done' | 'error' | 'tool_start' | 'tool_result'
+  type: 'token' | 'citation' | 'done' | 'error' | 'tool_start' | 'tool_result' | 'usage'
   value?: string
   citation?: Citation
   message?: string
   tool?: AiToolEvent
+  usage?: { inputTokens: number; outputTokens: number }
 }
 
 export interface DashboardRange {

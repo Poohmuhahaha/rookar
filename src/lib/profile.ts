@@ -38,10 +38,25 @@ export async function uploadProfileAvatar(file: File) {
     quality: 0.85,
     fileName: 'avatar.webp',
   })
-  const data = await apiFetch<{ session: Session }>('/me', {
-    method: 'PATCH',
-    body: JSON.stringify({ avatarMediaId: media.id }),
-  })
-  setSession(data.session)
-  avatarOverride.value = null
+  try {
+    const data = await apiFetch<{ session: Session }>('/me', {
+      method: 'PATCH',
+      body: JSON.stringify({ avatarMediaId: media.id }),
+    })
+    setSession(data.session)
+    avatarOverride.value = null
+  } catch (error) {
+    let avatarLinked = true
+    try {
+      const current = await apiFetch<{ session: Session | null }>('/auth/session')
+      avatarLinked = current.session?.user.avatarUrl?.includes(media.id) ?? false
+    } catch {
+      // If we cannot confirm, keep the media to avoid deleting a valid avatar.
+      avatarLinked = true
+    }
+    if (!avatarLinked) {
+      await apiFetch(`/media/${media.id}`, { method: 'DELETE' }).catch(() => undefined)
+    }
+    throw error
+  }
 }

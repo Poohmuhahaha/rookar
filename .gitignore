@@ -40,3 +40,4 @@ data/*.sqlite-*
 # Local data and backups must never be committed
 backups/
 data/
+.data/

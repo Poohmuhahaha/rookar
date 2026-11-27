@@ -17,6 +17,7 @@ import { agentRoutes } from './routes/agents'
 import { meRoutes } from './routes/me'
 import { chatRoutes } from './routes/chat'
 import { mediaRoutes } from './routes/media'
+import { aiRoutes } from './routes/ai'
 
 export const app = new Hono<AppEnv>()
 
@@ -109,6 +110,7 @@ app.route('/api/agents', agentRoutes)
 app.route('/api/me', meRoutes)
 app.route('/api/chat', chatRoutes)
 app.route('/api/media', mediaRoutes)
+app.route('/api/ai', aiRoutes)
 
 app.notFound((c) => c.json({ error: 'not found' }, 404))
 app.onError((error, c) => {

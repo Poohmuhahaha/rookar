@@ -3,6 +3,7 @@ import type { AppEnv } from '../types'
 import { enforceRateLimit } from '../security'
 import {
   getMediaObject,
+  getMediaUsage,
   MediaError,
   removeMedia,
   saveImage,
@@ -31,13 +32,31 @@ mediaRoutes.post('/', async (c) => {
   try {
     const body = await c.req.parseBody()
     const file = body.file
+    const thumb = body.thumb
     const rawKind = typeof body.kind === 'string' ? body.kind : 'avatar'
     if (!MEDIA_KINDS.has(rawKind as MediaKind)) {
       throw new MediaError('ประเภทไฟล์ไม่รองรับ')
     }
     if (!(file instanceof File)) throw new MediaError('ไม่พบไฟล์ที่อัปโหลด')
-    const media = await saveImage(user.id, file, rawKind as MediaKind)
+    if (thumb !== undefined && !(thumb instanceof File)) {
+      throw new MediaError('ไฟล์ thumbnail ไม่ถูกต้อง')
+    }
+    const media = await saveImage(
+      user.id,
+      file,
+      rawKind as MediaKind,
+      thumb instanceof File ? thumb : undefined,
+    )
     return c.json({ media }, 201)
+  } catch (error) {
+    return mediaErrorResponse(error)
+  }
+})
+
+mediaRoutes.get('/usage', async (c) => {
+  const user = c.get('user')
+  try {
+    return c.json({ usage: await getMediaUsage(user.id) })
   } catch (error) {
     return mediaErrorResponse(error)
   }

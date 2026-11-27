@@ -19,6 +19,11 @@ function configureDatabase(sqlite: Database) {
   }
   sqlite.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username ON users(username);')
 
+  const mediaColumns = sqlite.query('PRAGMA table_info(media_files)').all() as { name: string }[]
+  if (!mediaColumns.some((column) => column.name === 'thumb_size_bytes')) {
+    sqlite.exec('ALTER TABLE media_files ADD COLUMN thumb_size_bytes INTEGER;')
+  }
+
   const sourceColumns = sqlite.query('PRAGMA table_info(data_sources)').all() as { name: string }[]
   if (!sourceColumns.some((column) => column.name === 'industry_confidence')) {
     sqlite.exec('ALTER TABLE data_sources ADD COLUMN industry_confidence REAL;')

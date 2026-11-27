@@ -1,5 +1,6 @@
 import type { AiStreamEvent } from '../../src/types'
 import { env } from '../env'
+import { estimateTokens } from './aiUsage'
 import {
   TOOL_MAP,
   TOOL_SCHEMAS,
@@ -7,8 +8,13 @@ import {
   type ToolContext,
 } from '../tools'
 
+type UserContentPart =
+  | { type: 'text'; text: string }
+  | { type: 'image_url'; image_url: { url: string; detail?: 'auto' | 'low' | 'high' } }
+
 type ApiMessage =
-  | { role: 'system' | 'user'; content: string }
+  | { role: 'system'; content: string }
+  | { role: 'user'; content: string | UserContentPart[] }
   | { role: 'assistant'; content: string | null; tool_calls?: ToolCallPayload[] }
   | { role: 'tool'; tool_call_id: string; content: string }
 
@@ -28,6 +34,11 @@ type CompletionEvent =
   | { type: 'token'; value: string }
   | { type: 'tool_calls'; calls: ToolCall[] }
 
+type ChatImageInput = {
+  mimeType: string
+  dataUrl: string
+}
+
 type RunParams = {
   systemPrompt: string
   question: string
@@ -35,6 +46,8 @@ type RunParams = {
   context: ToolContext
   sessionId?: string
   signal?: AbortSignal
+  maxOutputTokens?: number
+  images?: ChatImageInput[]
 }
 
 const MAX_STEPS = 5
@@ -45,6 +58,7 @@ async function* streamCompletion(
   useTools: boolean,
   signal: AbortSignal | undefined,
   sessionId: string | undefined,
+  maxOutputTokens = 1200,
 ): AsyncGenerator<CompletionEvent> {
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
@@ -59,6 +73,7 @@ async function* streamCompletion(
       messages,
       stream: true,
       temperature: 0.3,
+      max_tokens: maxOutputTokens,
     }
     if (useTools) {
       body.tools = TOOL_SCHEMAS
@@ -155,6 +170,16 @@ async function* streamCompletion(
   }
 }
 
+function estimateMessageTokens(messages: ApiMessage[], imageCount: number): number {
+  const serialized = JSON.stringify(messages, (key, value) => {
+    if (key === 'url' && typeof value === 'string' && value.startsWith('data:image/')) {
+      return 'data:image/[omitted]'
+    }
+    return value
+  })
+  return estimateTokens(serialized) + imageCount * 1000
+}
+
 function parseArguments(raw: string): Record<string, unknown> {
   try {
     const parsed = JSON.parse(raw || '{}')
@@ -165,19 +190,37 @@ function parseArguments(raw: string): Record<string, unknown> {
 }
 
 export async function* runToolCallingAgent(params: RunParams): AsyncGenerator<AiStreamEvent> {
+  const images = params.images ?? []
+  const userContent: string | UserContentPart[] = images.length
+    ? [
+      { type: 'text', text: params.question },
+      ...images.map((image): UserContentPart => ({
+        type: 'image_url',
+        image_url: { url: image.dataUrl, detail: 'auto' },
+      })),
+    ]
+    : params.question
   const messages: ApiMessage[] = [
     { role: 'system', content: params.systemPrompt },
     ...params.history.map((entry) => ({ role: entry.role, content: entry.content })),
-    { role: 'user', content: params.question },
+    { role: 'user', content: userContent },
   ]
+  const usage = { inputTokens: 0, outputTokens: 0 }
 
   for (let step = 0; step < MAX_STEPS; step += 1) {
     const allowTools = step < MAX_STEPS - 1
     let content = ''
     let pendingCalls: ToolCall[] = []
+    usage.inputTokens += estimateMessageTokens(messages, images.length)
 
     try {
-      for await (const event of streamCompletion(messages, allowTools, params.signal, params.sessionId)) {
+      for await (const event of streamCompletion(
+        messages,
+        allowTools,
+        params.signal,
+        params.sessionId,
+        params.maxOutputTokens,
+      )) {
         if (event.type === 'token') {
           content += event.value
           yield { type: 'token', value: event.value }
@@ -187,15 +230,36 @@ export async function* runToolCallingAgent(params: RunParams): AsyncGenerator<Ai
       }
     } catch (error) {
       if (step === 0 && !params.signal?.aborted && !content) {
-        for await (const event of streamCompletion(messages, false, params.signal, params.sessionId)) {
-          if (event.type === 'token') yield { type: 'token', value: event.value }
+        usage.inputTokens += estimateMessageTokens(messages, images.length)
+        let fallbackContent = ''
+        for await (const event of streamCompletion(
+          messages,
+          false,
+          params.signal,
+          params.sessionId,
+          params.maxOutputTokens,
+        )) {
+          if (event.type === 'token') {
+            fallbackContent += event.value
+            yield { type: 'token', value: event.value }
+          }
         }
+        usage.outputTokens += estimateTokens(fallbackContent)
+        yield { type: 'usage', usage }
         return
       }
       throw error
     }
 
-    if (pendingCalls.length === 0) return
+    usage.outputTokens += estimateTokens(content)
+    for (const call of pendingCalls) {
+      usage.outputTokens += estimateTokens(call.arguments)
+    }
+
+    if (pendingCalls.length === 0) {
+      yield { type: 'usage', usage }
+      return
+    }
 
     const prepared = pendingCalls.map((call) => {
       const tool = TOOL_MAP.get(call.name)
@@ -271,4 +335,6 @@ export async function* runToolCallingAgent(params: RunParams): AsyncGenerator<Ai
       })
     }
   }
+
+  yield { type: 'usage', usage }
 }

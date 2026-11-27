@@ -12,6 +12,16 @@ export type MediaDto = {
   thumbUrl: string
 }
 
+export type MediaUsage = {
+  fileCount: number
+  bytesUsed: number
+  maxFileBytes: number
+  maxBytes: number
+  maxFiles: number
+}
+
+const ALLOWED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp'])
+
 type UploadOptions = {
   kind: 'avatar' | 'chat_image'
   maxEdge?: number
@@ -20,8 +30,8 @@ type UploadOptions = {
 }
 
 async function resizeImage(file: File, maxEdge: number, quality: number): Promise<Blob> {
-  if (!file.type.startsWith('image/')) {
-    throw new Error('กรุณาเลือกไฟล์รูปภาพ')
+  if (!ALLOWED_IMAGE_TYPES.has(file.type)) {
+    throw new Error('รองรับเฉพาะรูป JPG, PNG หรือ WebP')
   }
 
   const bitmap = await createImageBitmap(file)
@@ -49,12 +59,27 @@ export async function uploadImage(file: File, options: UploadOptions): Promise<M
   const maxEdge = options.maxEdge ?? 2048
   const quality = options.quality ?? 0.85
   const blob = await resizeImage(file, maxEdge, quality)
+  const thumb = options.kind === 'chat_image'
+    ? await resizeImage(file, Math.min(640, maxEdge), 0.8)
+    : null
   const form = new FormData()
   form.append('file', new File([blob], options.fileName ?? 'image.webp', { type: 'image/webp' }))
+  if (thumb) {
+    form.append('thumb', new File([thumb], 'thumb.webp', { type: 'image/webp' }))
+  }
   form.append('kind', options.kind)
   const data = await apiFetch<{ media: MediaDto }>('/media', {
     method: 'POST',
     body: form,
   })
   return data.media
+}
+
+export async function getMediaUsage(): Promise<MediaUsage> {
+  const data = await apiFetch<{ usage: MediaUsage }>('/media/usage')
+  return data.usage
+}
+
+export async function deleteMedia(id: string): Promise<void> {
+  await apiFetch<{ ok: true }>(`/media/${encodeURIComponent(id)}`, { method: 'DELETE' })
 }

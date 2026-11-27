@@ -154,6 +154,7 @@ export const SCHEMA_SQL = `
     file_name TEXT NOT NULL,
     mime_type TEXT NOT NULL,
     size_bytes INTEGER NOT NULL CHECK (size_bytes > 0),
+    thumb_size_bytes INTEGER,
     sha256 TEXT NOT NULL,
     width INTEGER,
     height INTEGER,
@@ -174,6 +175,24 @@ export const SCHEMA_SQL = `
     PRIMARY KEY (media_id, owner_type, user_id, owner_id)
   );
   CREATE INDEX IF NOT EXISTS idx_media_links_owner ON media_links(user_id, owner_type, owner_id);
+
+  CREATE TABLE IF NOT EXISTS media_usage (
+    user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    file_count INTEGER NOT NULL DEFAULT 0,
+    bytes_used INTEGER NOT NULL DEFAULT 0,
+    updated_at TEXT NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS ai_usage (
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    period TEXT NOT NULL,
+    message_count INTEGER NOT NULL DEFAULT 0,
+    input_tokens INTEGER NOT NULL DEFAULT 0,
+    output_tokens INTEGER NOT NULL DEFAULT 0,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (user_id, period)
+  );
+  CREATE INDEX IF NOT EXISTS idx_ai_usage_period ON ai_usage(period);
 `
 export type DbUser = {
   id: string

@@ -25,4 +25,7 @@ database_id = "f9c8cc02-55ec-4c06-a6f7-cfcae2047692"
 
 [[r2_buckets]]
 binding = "MEDIA"
-bucket_name = "rookar-media"
+bucket_name = "rookar-private"
+
+[triggers]
+crons = ["0 3 * * *"]

@@ -195,6 +195,7 @@ CREATE TABLE IF NOT EXISTS media_files (
   file_name TEXT NOT NULL,
   mime_type TEXT NOT NULL,
   size_bytes INTEGER NOT NULL CHECK (size_bytes > 0),
+  thumb_size_bytes INTEGER,
   sha256 TEXT NOT NULL,
   width INTEGER,
   height INTEGER,
@@ -216,6 +217,24 @@ CREATE TABLE IF NOT EXISTS media_links (
 );
 CREATE INDEX IF NOT EXISTS idx_media_links_owner ON media_links(user_id, owner_type, owner_id);
 
+CREATE TABLE IF NOT EXISTS media_usage (
+  user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  file_count INTEGER NOT NULL DEFAULT 0,
+  bytes_used INTEGER NOT NULL DEFAULT 0,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS ai_usage (
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  period TEXT NOT NULL,
+  message_count INTEGER NOT NULL DEFAULT 0,
+  input_tokens INTEGER NOT NULL DEFAULT 0,
+  output_tokens INTEGER NOT NULL DEFAULT 0,
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (user_id, period)
+);
+CREATE INDEX IF NOT EXISTS idx_ai_usage_period ON ai_usage(period);
+
 -- ============================================================
 -- Record applied migrations so future wrangler migrations stay in sync
 -- ============================================================
@@ -234,4 +253,6 @@ INSERT OR IGNORE INTO d1_migrations (name) VALUES
   ('0007_0007_source_industry_confidence.sql'),
   ('0008_0008_conversation_composite_key.sql'),
   ('0009_0009_rate_limits_preview_rows.sql'),
-  ('0010_media_r2.sql');
+  ('0010_media_r2.sql'),
+  ('0011_media_optimizations.sql'),
+  ('0012_ai_usage.sql');

@@ -12,11 +12,32 @@ meRoutes.patch('/', async (c) => {
   const user = c.get('user')
   const body = await c.req.json().catch(() => null) as {
     name?: string
+    email?: string
+    role?: string
     avatarUrl?: string
     avatarMediaId?: string
   } | null
   if (body?.name !== undefined && (typeof body.name !== 'string' || body.name.trim().length < 2 || body.name.trim().length > 120)) {
     return c.json({ error: 'ชื่อไม่ถูกต้อง' }, 400)
+  }
+  if (body?.email !== undefined && typeof body.email !== 'string') {
+    return c.json({ error: 'รูปแบบอีเมลไม่ถูกต้อง' }, 400)
+  }
+  const email = body?.email === undefined ? undefined : body.email.trim().toLowerCase()
+  if (email !== undefined && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return c.json({ error: 'รูปแบบอีเมลไม่ถูกต้อง' }, 400)
+  }
+  if (email !== undefined) {
+    const existing = await db.query<{ id: string }>('SELECT id FROM users WHERE email = ? AND id <> ?').get(email, user.id)
+    if (existing) return c.json({ error: 'อีเมลนี้ถูกใช้งานแล้ว' }, 409)
+  }
+  const role = body?.role
+  if (role !== undefined) {
+    const allowed =
+      role === 'admin'
+        ? user.role === 'admin'
+        : ['owner', 'manager', 'staff'].includes(role)
+    if (!allowed) return c.json({ error: 'บทบาทไม่ถูกต้อง' }, 400)
   }
   if (body?.avatarUrl !== undefined) {
     if (typeof body.avatarUrl !== 'string' || body.avatarUrl.length > 500 || !(body.avatarUrl.startsWith('/') || body.avatarUrl.startsWith('https://') || body.avatarUrl.startsWith('data:image/'))) {
@@ -35,6 +56,8 @@ meRoutes.patch('/', async (c) => {
     }
   }
   if (body?.name?.trim()) await db.query('UPDATE users SET name = ? WHERE id = ?').run(body.name.trim(), user.id)
+  if (email !== undefined) await db.query('UPDATE users SET email = ? WHERE id = ?').run(email, user.id)
+  if (role !== undefined) await db.query('UPDATE users SET role = ? WHERE id = ?').run(role, user.id)
   if (body?.avatarMediaId === undefined && typeof body?.avatarUrl === 'string') {
     await db.query('UPDATE users SET avatar_url = ?, avatar_media_id = NULL WHERE id = ?').run(body.avatarUrl, user.id)
   }
@@ -51,6 +74,7 @@ meRoutes.delete('/data', async (c) => {
     { sql: 'DELETE FROM conversations WHERE user_id = ?', params: [user.id] },
     { sql: 'DELETE FROM user_agents WHERE user_id = ?', params: [user.id] },
     { sql: 'DELETE FROM businesses WHERE user_id = ?', params: [user.id] },
+    { sql: 'DELETE FROM ai_usage WHERE user_id = ?', params: [user.id] },
     { sql: 'UPDATE users SET onboarding_complete = 0 WHERE id = ?', params: [user.id] },
   ])
   return c.json({ ok: true })

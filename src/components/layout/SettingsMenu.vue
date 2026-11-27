@@ -30,6 +30,7 @@ import AppButton from '@/components/ui/AppButton.vue'
 import AppModal from '@/components/ui/AppModal.vue'
 import { getSession, logout } from '@/lib/mockApi'
 import { profileAvatar, uploadProfileAvatar } from '@/lib/profile'
+import { locale } from '@/lib/i18n'
 import { useToast } from '@/lib/toast'
 
 const props = withDefaults(defineProps<{ variant?: 'default' | 'assistant' }>(), {
@@ -166,7 +167,7 @@ async function signOut() {
   <input
     ref="avatarInput"
     type="file"
-    accept="image/*"
+    accept="image/jpeg,image/png,image/webp"
     class="sr-only"
     aria-label="อัปโหลดรูปโปรไฟล์"
     @change="handleAvatarUpload"
@@ -268,6 +269,13 @@ async function signOut() {
             <span class="text-[11px] font-medium text-brand-700">เปลี่ยนรูป</span>
             <ChevronRight class="h-3.5 w-3.5 text-faint" aria-hidden="true" />
           </button>
+          <p class="px-3 pb-2 text-[10.5px] leading-relaxed text-muted">
+            {{
+              locale === 'th'
+                ? 'JPG, PNG, WebP · สูงสุด 10 MB/ไฟล์ · รวม 250 MB หรือ 500 ไฟล์'
+                : 'JPG, PNG, WebP · max 10 MB/file · 250 MB or 500 files total'
+            }}
+          </p>
         </section>
 
         <!-- 3. ข้อมูลและความเป็นส่วนตัว -->

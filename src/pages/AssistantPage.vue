@@ -50,6 +50,7 @@ import { locale } from '@/lib/i18n'
 import { createConversation, createMessage, getConversations, getSession, listSources, saveConversations, streamAiReply } from '@/lib/mockApi'
 import { formatNumber, timeAgo } from '@/lib/format'
 import { useToast } from '@/lib/toast'
+import { deleteMedia, uploadImage, type MediaDto } from '@/lib/media'
 import type { ChatMessage, Conversation, SpecialistType } from '@/types'
 
 const router = useRouter()
@@ -74,7 +75,10 @@ const activeId = ref<string | null>(null)
 const messages = ref<ChatMessage[]>([])
 const composer = ref('')
 const attachedFile = ref<File | null>(null)
+const attachedImages = ref<MediaDto[]>([])
+const imageUploading = ref(false)
 const fileInput = ref<HTMLInputElement | null>(null)
+let attachmentGeneration = 0
 const isStreaming = ref(false)
 const isListening = ref(false)
 const stopRequested = ref(false)
@@ -391,6 +395,7 @@ function resetChatView() {
   messages.value = []
   composer.value = ''
   contextOpen.value = false
+  void discardAttachedImages()
 }
 
 function startNewChat(openRoleModal = true) {
@@ -449,32 +454,95 @@ function syncConversation(conversationId: string) {
 }
 
 function pickFile() {
-  if (isStreaming.value) return
+  if (isStreaming.value || imageUploading.value) return
   fileInput.value?.click()
 }
 
-function handleFileChange(event: Event) {
+const IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp'])
+
+async function addImages(files: File[]) {
+  const generation = attachmentGeneration
+  const remaining = Math.max(0, 4 - attachedImages.value.length)
+  if (remaining === 0) {
+    toast.info('แนบรูปครบแล้ว', 'แนบรูปได้สูงสุด 4 รูปต่อข้อความ')
+    return
+  }
+  const accepted = files.slice(0, remaining)
+  if (files.length > remaining) {
+    toast.info('แนบรูปได้สูงสุด 4 รูป', 'รูปที่เกินจะถูกข้าม')
+  }
+  imageUploading.value = true
+  try {
+    for (const file of accepted) {
+      try {
+        const media = await uploadImage(file, {
+          kind: 'chat_image',
+          maxEdge: 1600,
+          quality: 0.82,
+          fileName: 'chat.webp',
+        })
+        if (generation !== attachmentGeneration) {
+          void deleteMedia(media.id).catch(() => undefined)
+          continue
+        }
+        attachedImages.value.push(media)
+      } catch (error) {
+        toast.error('อัปโหลดรูปไม่สำเร็จ', error instanceof Error ? error.message : 'กรุณาลองใหม่')
+      }
+    }
+  } finally {
+    imageUploading.value = false
+  }
+}
+
+async function handleFileChange(event: Event) {
   const input = event.target as HTMLInputElement
-  const file = input.files?.[0]
-  if (!file) return
-
-  if (!file.name.toLowerCase().endsWith('.csv')) {
-    toast.error('ไฟล์ไม่รองรับ', 'สำหรับการแชท รองรับไฟล์ CSV เท่านั้น')
-    input.value = ''
-    return
-  }
-  if (file.size > 10 * 1024 * 1024) {
-    toast.error('ไฟล์ใหญ่เกินไป', 'รองรับไฟล์ไม่เกิน 10 MB')
-    input.value = ''
-    return
-  }
-
-  attachedFile.value = file
+  const files = Array.from(input.files ?? [])
   input.value = ''
+  if (files.length === 0) return
+
+  const imageFiles: File[] = []
+  let csv: File | null = null
+  for (const file of files) {
+    if (file.name.toLowerCase().endsWith('.csv')) {
+      if (csv) {
+        toast.info('แนบ CSV ได้ครั้งละ 1 ไฟล์', `ข้าม ${file.name}`)
+        continue
+      }
+      if (file.size > 10 * 1024 * 1024) {
+        toast.error('ไฟล์ใหญ่เกินไป', 'รองรับ CSV ไม่เกิน 10 MB')
+        continue
+      }
+      csv = file
+      continue
+    }
+    if (IMAGE_TYPES.has(file.type)) {
+      imageFiles.push(file)
+      continue
+    }
+    toast.error('ไฟล์ไม่รองรับ', 'รองรับ CSV, JPG, PNG หรือ WebP')
+  }
+
+  if (csv) attachedFile.value = csv
+  if (imageFiles.length > 0) await addImages(imageFiles)
 }
 
 function removeAttachment() {
   attachedFile.value = null
+}
+
+function removeAttachedImage(id: string) {
+  attachedImages.value = attachedImages.value.filter((image) => image.id !== id)
+  void deleteMedia(id).catch(() => undefined)
+}
+
+function discardAttachedImages() {
+  attachmentGeneration += 1
+  const images = attachedImages.value
+  attachedImages.value = []
+  for (const image of images) {
+    void deleteMedia(image.id).catch(() => undefined)
+  }
 }
 
 type StreamRunOptions = {
@@ -485,6 +553,8 @@ type StreamRunOptions = {
   history: { role: 'user' | 'assistant'; content: string }[]
   attachment: { name: string; content: string } | null
   conversationId: string | null
+  mediaIds?: string[]
+  messageId?: string
 }
 
 async function runStream(options: StreamRunOptions) {
@@ -502,6 +572,8 @@ async function runStream(options: StreamRunOptions) {
       history: options.history,
       attachment: options.attachment,
       conversationId: options.conversationId ?? undefined,
+      mediaIds: options.mediaIds,
+      messageId: options.messageId,
       signal: streamController.signal,
     })) {
       if (stopRequested.value) break
@@ -558,8 +630,16 @@ async function send(rawQuestion: string) {
     roleModalOpen.value = true
     return
   }
+  if (imageUploading.value) {
+    toast.info('กำลังอัปโหลดรูป', 'กรุณารอให้อัปโหลดเสร็จก่อนส่ง')
+    return
+  }
   const attachment = attachedFile.value
-  const question = rawQuestion.trim() || (attachment ? 'ช่วยวิเคราะห์ไฟล์นี้ให้หน่อย' : '')
+  const images = attachedImages.value.slice(0, 4)
+  const hasImages = images.length > 0
+  const question = rawQuestion.trim() || (
+    hasImages ? 'ช่วยวิเคราะห์รูปที่แนบให้หน่อย' : attachment ? 'ช่วยวิเคราะห์ไฟล์นี้ให้หน่อย' : ''
+  )
   if (!question || isStreaming.value) return
 
   const specialist = roleForConversation(activeSpecialist.value)
@@ -582,6 +662,7 @@ async function send(rawQuestion: string) {
     .slice(0, 6)
   composer.value = ''
   attachedFile.value = null
+  attachedImages.value = []
   if (!activeId.value) {
     const conversation = createConversation(question.slice(0, 56))
     conversation.specialistRole = specialist
@@ -593,9 +674,13 @@ async function send(rawQuestion: string) {
   if (conversationId) {
     void router.navigate({ to: '/app/assistant', search: { chat: conversationId }, replace: true })
   }
-  const userContent = attachment ? `${question}\n\n[ไฟล์แนบ: ${attachment.name}]` : question
+  const notes: string[] = []
+  if (attachment) notes.push(`[ไฟล์แนบ: ${attachment.name}]`)
+  if (hasImages) notes.push(`[แนบรูป ${images.length} รูป]`)
+  const userContent = notes.length > 0 ? `${question}\n\n${notes.join('\n')}` : question
   const userMessage = createMessage('user', userContent)
   userMessage.specialistRole = specialist
+  userMessage.mediaIds = hasImages ? images.map((image) => image.id) : undefined
   const assistantMessage = createMessage('assistant')
   assistantMessage.specialistRole = specialist
   const leadAgent = pickLeadAgent(question, specialist)
@@ -615,6 +700,8 @@ async function send(rawQuestion: string) {
     history: historyPayload,
     attachment: attachmentPayload,
     conversationId: conversationId ?? null,
+    mediaIds: userMessage.mediaIds,
+    messageId: userMessage.id,
   })
 }
 
@@ -667,6 +754,8 @@ async function regenerateFromUserIndex(index: number) {
     history: historyPayload,
     attachment: null,
     conversationId: conversationId ?? null,
+    mediaIds: userMessage.mediaIds,
+    messageId: userMessage.id,
   })
 }
 
@@ -921,6 +1010,34 @@ async function copyMessage(text: string) {
               <X class="h-3.5 w-3.5" aria-hidden="true" />
             </button>
           </div>
+          <div v-if="attachedImages.length || imageUploading" class="mb-2 flex flex-wrap items-center gap-2">
+            <div
+              v-for="image in attachedImages"
+              :key="image.id"
+              class="group/image relative h-16 w-16 overflow-hidden rounded-xl bg-neutral-200"
+            >
+              <img
+                :src="image.thumbUrl"
+                :alt="image.fileName || 'รูปแนบ'"
+                class="h-full w-full object-cover"
+                loading="lazy"
+              />
+              <button
+                type="button"
+                class="absolute right-1 top-1 inline-flex h-5 w-5 items-center justify-center rounded-full bg-black/65 text-white transition hover:bg-black"
+                aria-label="เอารูปแนบออก"
+                @click="removeAttachedImage(image.id)"
+              >
+                <X class="h-3 w-3" aria-hidden="true" />
+              </button>
+            </div>
+            <div
+              v-if="imageUploading"
+              class="flex h-16 w-16 items-center justify-center rounded-xl bg-neutral-100 text-[10px] text-muted"
+            >
+              กำลังอัปโหลด
+            </div>
+          </div>
           <div class="flex items-start gap-2.5 px-3 pt-1">
             <div class="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center overflow-hidden rounded-full bg-neutral-100">
               <img src="/ai-avatar.png" alt="ROOKAR AI" class="h-full w-full object-cover" />
@@ -959,8 +1076,8 @@ async function copyMessage(text: string) {
             <button
               type="button"
               class="inline-flex h-8.5 w-8.5 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-full bg-white text-[11.5px] font-medium text-ink-soft transition hover:bg-neutral-100 hover:text-ink focus-visible:bg-neutral-100 focus-visible:text-ink disabled:pointer-events-none disabled:opacity-45 sm:w-auto sm:justify-start sm:px-3.5"
-              :disabled="!activeSpecialist || isStreaming"
-              aria-label="แนบไฟล์"
+              :disabled="!activeSpecialist || isStreaming || imageUploading"
+              aria-label="แนบไฟล์หรือรูปภาพ"
               @click="pickFile"
             >
               <Paperclip class="h-3.5 w-3.5" aria-hidden="true" />
@@ -970,7 +1087,8 @@ async function copyMessage(text: string) {
               ref="fileInput"
               type="file"
               class="sr-only"
-              accept=".csv"
+              accept=".csv,image/jpeg,image/png,image/webp"
+              multiple
               @change="handleFileChange"
             />
             <DropdownMenuRoot>
@@ -1030,7 +1148,7 @@ async function copyMessage(text: string) {
                 v-else
                 type="button"
                 class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-ink text-white transition hover:bg-black disabled:bg-ink-100 disabled:text-faint"
-                :disabled="!activeSpecialist || (!composer.trim() && !attachedFile)"
+                :disabled="!activeSpecialist || imageUploading || (!composer.trim() && !attachedFile && attachedImages.length === 0)"
                 aria-label="ส่งคำถาม"
                 @click="send(composer)"
               >
